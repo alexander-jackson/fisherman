@@ -11,6 +11,11 @@ use webhook::Webhook;
 async fn main() {
     let webhook = warp::post().and(warp::body::json()).map(|body: Webhook| {
         dbg!(&body);
+
+        if body.is_master_push() {
+            println!("Commits were pushed to `master` in this event");
+        }
+
         "Thanks for the update"
     });
 

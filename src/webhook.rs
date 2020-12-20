@@ -45,12 +45,30 @@ impl Webhook {
     pub fn trigger_build(&self) -> std::io::Result<()> {
         let path = Path::new("/root").join(&self.repository.name);
 
-        log::info!("Build a release binary for the project at: {:?}", path);
+        log::info!("Building a release binary for the project at: {:?}", path);
 
         Command::new("cargo")
             .args(&["build", "--release"])
             .current_dir(path)
-            .spawn()?;
+            .spawn()?
+            .wait()?;
+
+        Ok(())
+    }
+
+    /// Triggers a process restart by `supervisor`.
+    ///
+    /// Restarts the process within `supervisor`, allowing a new version to supersede the existing
+    /// version.
+    pub fn trigger_restart(&self) -> std::io::Result<()> {
+        let binary_name = &self.repository.name;
+
+        log::info!("Allowing `supervisor` to restart: {}", binary_name);
+
+        Command::new("supervisorctl")
+            .args(&["restart", binary_name])
+            .spawn()?
+            .wait()?;
 
         Ok(())
     }

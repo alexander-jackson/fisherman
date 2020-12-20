@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::process::Command;
 
 use crate::git;
 
@@ -33,6 +34,21 @@ impl Webhook {
         let mut remote = repo.find_remote("origin")?;
         let fetch_commit = git::fetch(&repo, &[master_branch], &mut remote)?;
         git::merge(&repo, master_branch, fetch_commit)
+    }
+
+    /// Triggers the recompilation of a repository associated with the webhook.
+    ///
+    /// This should be run after pulling the new changes to update the repository. After being
+    /// rebuilt, it can be restarted in `supervisor` and the new changes will go live.
+    pub fn trigger_build(&self) -> std::io::Result<()> {
+        let path = Path::new("/root").join(&self.repository.name);
+
+        Command::new("cargo")
+            .args(&["build", "--release"])
+            .current_dir(path)
+            .spawn()?;
+
+        Ok(())
     }
 }
 

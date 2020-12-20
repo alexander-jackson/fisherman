@@ -19,6 +19,7 @@ async fn main() {
         if body.is_master_push() {
             log::info!("Commits were pushed to `master` in this event");
             body.trigger_pull().expect("Failed to execute the pull.");
+            body.trigger_build().expect("Failed to rebuild the binary");
         }
 
         "Thanks for the update"

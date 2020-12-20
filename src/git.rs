@@ -42,7 +42,7 @@ pub fn fetch<'a>(
     fo.remote_callbacks(cb);
     fo.download_tags(git2::AutotagOption::All);
 
-    println!("Fetching {} for repo", remote.name().unwrap());
+    log::debug!("Fetching {} for repo", remote.name().unwrap());
     remote.fetch(refs, Some(&mut fo), None)?;
 
     // If there are local objects (we got a thin pack), then tell the user
@@ -78,7 +78,7 @@ fn fast_forward(
 ) -> Result<(), git2::Error> {
     let name = lb.name().expect("Reference was invalid UTF-8");
     let msg = format!("Fast-Forward: Setting {} to id: {}", name, rc.id());
-    println!("{}", msg);
+    log::debug!("{}", msg);
 
     repo.set_head(&name)?;
     lb.set_target(rc.id(), &msg)?;
@@ -102,7 +102,7 @@ fn normal_merge(
     let mut idx = repo.merge_trees(&ancestor, &local_tree, &remote_tree, None)?;
 
     if idx.has_conflicts() {
-        println!("Merge conficts detected...");
+        log::debug!("Merge conficts detected...");
         repo.checkout_index(Some(&mut idx), None)?;
         return Ok(());
     }
@@ -141,7 +141,7 @@ pub fn merge<'a>(
 
     // 2. Do the appopriate merge
     if analysis.0.is_fast_forward() {
-        println!("Doing a fast forward");
+        log::debug!("Doing a fast forward");
         // do a fast forward
         let refname = format!("refs/heads/{}", remote_branch);
 
@@ -170,7 +170,7 @@ pub fn merge<'a>(
         let head_commit = repo.reference_to_annotated_commit(&repo.head()?)?;
         normal_merge(&repo, &head_commit, &fetch_commit)?;
     } else {
-        println!("Nothing to do...");
+        log::debug!("Nothing to do...");
     }
 
     Ok(())

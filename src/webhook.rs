@@ -28,8 +28,10 @@ impl Webhook {
     /// to). It will then merge the contents of the fetch.
     pub fn trigger_pull(&self) -> Result<(), git2::Error> {
         let path = Path::new("/root").join(&self.repository.name);
-        let repo = git2::Repository::open(path)?;
+        let repo = git2::Repository::open(&path)?;
         let master_branch = &self.repository.master_branch;
+
+        log::info!("Fetching changes for the project at: {:?}", path);
 
         let mut remote = repo.find_remote("origin")?;
         let fetch_commit = git::fetch(&repo, &[master_branch], &mut remote)?;
@@ -42,6 +44,8 @@ impl Webhook {
     /// rebuilt, it can be restarted in `supervisor` and the new changes will go live.
     pub fn trigger_build(&self) -> std::io::Result<()> {
         let path = Path::new("/root").join(&self.repository.name);
+
+        log::info!("Build a release binary for the project at: {:?}", path);
 
         Command::new("cargo")
             .args(&["build", "--release"])

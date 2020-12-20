@@ -1,5 +1,10 @@
 use fern::colors::{Color, ColoredLevelConfig};
 
+/// Sets up the logging for the application.
+///
+/// Initialises a new instance of a [`fern`] logger, which displays the time and some coloured
+/// output based on the level of the message. It also suppresses output from libraries unless they
+/// are warnings or errors, and enables all log levels for the current binary.
 pub fn setup_logger() {
     let colours_line = ColoredLevelConfig::new()
         .error(Color::Red)

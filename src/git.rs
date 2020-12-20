@@ -1,5 +1,6 @@
 use std::io::{self, Write};
 
+/// Fetches the changes for a set of branches from a remote.
 pub fn fetch<'a>(
     repo: &'a git2::Repository,
     refs: &[&str],
@@ -71,6 +72,7 @@ pub fn fetch<'a>(
     Ok(repo.reference_to_annotated_commit(&fetch_head)?)
 }
 
+/// Performs a fast-forward merge on a repository.
 fn fast_forward(
     repo: &git2::Repository,
     lb: &mut git2::Reference,
@@ -87,6 +89,7 @@ fn fast_forward(
     Ok(())
 }
 
+/// Performs a normal merge on a repository.
 fn normal_merge(
     repo: &git2::Repository,
     local: &git2::AnnotatedCommit,
@@ -131,6 +134,7 @@ fn normal_merge(
     Ok(())
 }
 
+/// Performs a merge on a repository, whether that be a fast-forward or normal.
 pub fn merge<'a>(
     repo: &'a git2::Repository,
     remote_branch: &str,

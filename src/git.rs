@@ -1,4 +1,5 @@
 use std::io::{self, Write};
+use std::path::Path;
 
 /// Fetches the changes for a set of branches from a remote.
 pub fn fetch<'a>(
@@ -34,7 +35,7 @@ pub fn fetch<'a>(
         git2::Cred::ssh_key(
             username_from_url.unwrap(),
             None,
-            std::path::Path::new(&format!("{}/.ssh/id_rsa", std::env::var("HOME").unwrap())),
+            Path::new("/root/.ssh/id_rsa"),
             None,
         )
     });

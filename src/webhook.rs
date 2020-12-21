@@ -47,7 +47,7 @@ impl Webhook {
 
         log::info!("Building a release binary for the project at: {:?}", path);
 
-        Command::new("cargo")
+        Command::new("/root/.cargo/bin/cargo")
             .args(&["build", "--release"])
             .current_dir(path)
             .spawn()?

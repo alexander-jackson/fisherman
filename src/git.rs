@@ -1,4 +1,3 @@
-use std::io::{self, Write};
 use std::path::Path;
 
 /// Fetches the changes for a set of branches from a remote.
@@ -8,27 +7,6 @@ pub fn fetch<'a>(
     remote: &'a mut git2::Remote,
 ) -> Result<git2::AnnotatedCommit<'a>, git2::Error> {
     let mut cb = git2::RemoteCallbacks::new();
-
-    // Print out our transfer progress.
-    cb.transfer_progress(|stats| {
-        if stats.received_objects() == stats.total_objects() {
-            print!(
-                "Resolving deltas {}/{}\r",
-                stats.indexed_deltas(),
-                stats.total_deltas()
-            );
-        } else if stats.total_objects() > 0 {
-            print!(
-                "Received {}/{} objects ({}) in {} bytes\r",
-                stats.received_objects(),
-                stats.total_objects(),
-                stats.indexed_objects(),
-                stats.received_bytes()
-            );
-        }
-
-        io::stdout().flush().is_ok()
-    });
 
     // Use SSH credentials for authentication
     cb.credentials(|_url, username_from_url, _allowed_types| {
@@ -52,17 +30,16 @@ pub fn fetch<'a>(
     let stats = remote.stats();
 
     if stats.local_objects() > 0 {
-        println!(
-            "\rReceived {}/{} objects in {} bytes (used {} local \
-             objects)",
+        log::debug!(
+            "Received {}/{} objects in {} bytes (used {} local objects)",
             stats.indexed_objects(),
             stats.total_objects(),
             stats.received_bytes(),
             stats.local_objects()
         );
     } else {
-        println!(
-            "\rReceived {}/{} objects in {} bytes",
+        log::debug!(
+            "Received {}/{} objects in {} bytes",
             stats.indexed_objects(),
             stats.total_objects(),
             stats.received_bytes()

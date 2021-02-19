@@ -1,6 +1,7 @@
-use std::path::Path;
 use std::process::Command;
+use std::sync::Arc;
 
+use crate::config::Config;
 use crate::git;
 
 #[derive(Debug, Deserialize)]
@@ -23,18 +24,25 @@ impl Webhook {
 
     /// Triggers a `git pull` for the repository associated with the webhook.
     ///
-    /// This will open the repository, which is assumed to be at `/root/<name>` and fetch the
-    /// contents of its master branch (which can be `master`, `main` or whatever the default is set
-    /// to). It will then merge the contents of the fetch.
-    pub fn trigger_pull(&self) -> Result<(), git2::Error> {
-        let path = Path::new("/root").join(&self.repository.name);
+    /// This will open the repository, which is assumed to be at `repo_root` and fetch the contents
+    /// of its master branch (which can be `master`, `main` or whatever the default is set to). It
+    /// will then merge the contents of the fetch.
+    pub fn trigger_pull(&self, config: &Arc<Config>) -> Result<(), git2::Error> {
+        let path = config.default.repo_root.join(&self.repository.name);
         let repo = git2::Repository::open(&path)?;
         let master_branch = &self.repository.master_branch;
 
         log::info!("Fetching changes for the project at: {:?}", path);
 
         let mut remote = repo.find_remote("origin")?;
-        let fetch_commit = git::fetch(&repo, &[master_branch], &mut remote)?;
+
+        let fetch_commit = git::fetch(
+            &repo,
+            &[master_branch],
+            &mut remote,
+            &config.default.ssh_private_key,
+        )?;
+
         git::merge(&repo, master_branch, fetch_commit)
     }
 
@@ -42,12 +50,12 @@ impl Webhook {
     ///
     /// This should be run after pulling the new changes to update the repository. After being
     /// rebuilt, it can be restarted in `supervisor` and the new changes will go live.
-    pub fn trigger_build(&self) -> std::io::Result<()> {
-        let path = Path::new("/root").join(&self.repository.name);
+    pub fn trigger_build(&self, config: &Arc<Config>) -> std::io::Result<()> {
+        let path = config.default.repo_root.join(&self.repository.name);
 
         log::info!("Building a release binary for the project at: {:?}", path);
 
-        Command::new("/root/.cargo/bin/cargo")
+        Command::new(config.default.cargo_path.clone())
             .args(&["build", "--release"])
             .current_dir(path)
             .spawn()?

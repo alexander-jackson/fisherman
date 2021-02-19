@@ -22,6 +22,19 @@ cargo build --release
 
 ## Usage
 
-Currently, `fisherman` expects messages to reach it on port `5000`, and for
-repositories to be located under `/root/*`. It also assumes that repositories
-were cloned using SSH, and will rely on this for authentication.
+Currently, `fisherman` expects messages to reach it on port `5000`. The
+location of repositories is defined by the `repo_root` field in the
+configuration file. Repositories are also assumed to use SSH, and the private
+key at `ssh_private_key` will be used for authentication.
+
+### Configuration
+
+Configuration for `fisherman` is defined by the `fisherman.toml` file and has
+the following structure:
+
+```toml
+[default]
+ssh_private_key = "path to SSH key for authentication"
+repo_root = "top level directory where repositories are stored"
+cargo_path = "path to binary for cargo"
+```

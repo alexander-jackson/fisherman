@@ -5,17 +5,13 @@ pub fn fetch<'a>(
     repo: &'a git2::Repository,
     refs: &[&str],
     remote: &'a mut git2::Remote,
+    ssh_private_key_path: &'a Path,
 ) -> Result<git2::AnnotatedCommit<'a>, git2::Error> {
     let mut cb = git2::RemoteCallbacks::new();
 
     // Use SSH credentials for authentication
     cb.credentials(|_url, username_from_url, _allowed_types| {
-        git2::Cred::ssh_key(
-            username_from_url.unwrap(),
-            None,
-            Path::new("/root/.ssh/id_rsa"),
-            None,
-        )
+        git2::Cred::ssh_key(username_from_url.unwrap(), None, ssh_private_key_path, None)
     });
 
     let mut fo = git2::FetchOptions::new();

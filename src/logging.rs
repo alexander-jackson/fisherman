@@ -29,6 +29,8 @@ pub fn setup_logger() {
         })
         .level(log::LevelFilter::Warn)
         .level_for("fisherman", log::LevelFilter::Trace)
+        .level_for("actix_web", log::LevelFilter::Debug)
+        .level_for("actix_server", log::LevelFilter::Info)
         .chain(std::io::stdout())
         .apply()
         .expect("Failed to initialise the logger");

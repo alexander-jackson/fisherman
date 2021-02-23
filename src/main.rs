@@ -38,7 +38,7 @@ async fn handle_webhook(state: web::Data<State>, webhook: web::Json<Webhook>) ->
 
         // Restart in `supervisor`
         webhook
-            .trigger_restart()
+            .trigger_restart(&state.config)
             .expect("Failed to restart the process");
     }
 

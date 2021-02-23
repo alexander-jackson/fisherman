@@ -19,29 +19,30 @@ pub struct Config {
 }
 
 impl FromStr for Config {
-    type Err = toml::de::Error;
+    type Err = serde_yaml::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        toml::from_str(s)
+        serde_yaml::from_str(s)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
+    use std::str::FromStr;
 
     use crate::config::Config;
 
     #[test]
     fn config_can_be_parsed_from_a_string() {
         let content = r#"
-            [default]
-            ssh_private_key = "/root/.ssh/id_rsa"
-            repo_root = "/root"
-            cargo_path = "/root/.cargo/bin/cargo"
-        "#;
+default:
+    ssh_private_key: "/root/.ssh/id_rsa"
+    repo_root: "/root"
+    cargo_path: "/root/.cargo/bin/cargo"
+"#;
 
-        let config: Config = toml::from_str(&content).unwrap();
+        let config = Config::from_str(content).unwrap();
 
         assert_eq!(
             config.default.ssh_private_key,

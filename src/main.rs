@@ -50,7 +50,7 @@ async fn main() -> actix_web::Result<()> {
     logging::setup_logger();
 
     // Read the configuration file
-    let content = std::fs::read_to_string("fisherman.toml")?;
+    let content = std::fs::read_to_string("fisherman.yml")?;
     let config = Arc::new(Config::from_str(&content).expect("Failed to parse config"));
 
     log::info!("Using the following config: {:#?}", config);

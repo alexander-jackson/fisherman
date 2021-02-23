@@ -51,15 +51,26 @@ impl Webhook {
     /// This should be run after pulling the new changes to update the repository. After being
     /// rebuilt, it can be restarted in `supervisor` and the new changes will go live.
     pub fn trigger_build(&self, config: &Arc<Config>) -> std::io::Result<()> {
-        let path = config.default.repo_root.join(&self.repository.name);
+        let code_root = config.resolve_code_root(&self.repository.full_name);
+        let binaries = config.resolve_binaries(&self.repository.full_name);
 
-        log::info!("Building a release binary for the project at: {:?}", path);
+        let path = &config
+            .default
+            .repo_root
+            .join(&self.repository.name)
+            .join(&code_root);
 
-        Command::new(config.default.cargo_path.clone())
-            .args(&["build", "--release"])
-            .current_dir(path)
-            .spawn()?
-            .wait()?;
+        log::info!("Building release binaries with root at: {:?}", path);
+
+        for binary in binaries {
+            log::info!("Building the binary called: {}", binary);
+
+            Command::new(config.default.cargo_path.clone())
+                .args(&["build", "--release", "--bin", &binary])
+                .current_dir(&path)
+                .spawn()?
+                .wait()?;
+        }
 
         Ok(())
     }
@@ -68,15 +79,17 @@ impl Webhook {
     ///
     /// Restarts the process within `supervisor`, allowing a new version to supersede the existing
     /// version.
-    pub fn trigger_restart(&self) -> std::io::Result<()> {
-        let binary_name = &self.repository.name;
+    pub fn trigger_restart(&self, config: &Arc<Config>) -> std::io::Result<()> {
+        let binaries = config.resolve_binaries(&self.repository.full_name);
 
-        log::info!("Allowing `supervisor` to restart: {}", binary_name);
+        for binary in binaries {
+            log::info!("Allowing `supervisor` to restart: {}", binary);
 
-        Command::new("supervisorctl")
-            .args(&["restart", binary_name])
-            .spawn()?
-            .wait()?;
+            Command::new("supervisorctl")
+                .args(&["restart", &binary])
+                .spawn()?
+                .wait()?;
+        }
 
         Ok(())
     }

@@ -51,7 +51,7 @@ impl Config {
             }
         }
 
-        vec![String::from(repository.split('/').skip(1).next().unwrap())]
+        vec![String::from(repository.split('/').nth(1).unwrap())]
     }
 }
 
@@ -134,7 +134,7 @@ specific:
         let config = Config::from_str(CONFIG).unwrap();
         let code_root = config.resolve_code_root("alexander-jackson/locker");
 
-        assert_eq!(code_root, PathBuf::from("/"));
+        assert_eq!(code_root, PathBuf::new());
     }
 
     #[test]

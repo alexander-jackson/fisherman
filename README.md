@@ -35,17 +35,17 @@ the following structure:
 
 ```yaml
 default:
-	ssh_private_key: "path to SSH key for authentication"
-	repo_root: "top level directory where repositories are stored"
-	cargo_path: "path to binary for cargo"
-	secret: "globally used default secret"
-	port: "port to listen on, defaults to 5000"
+    ssh_private_key: "path to SSH key for authentication"
+    repo_root: "top level directory where repositories are stored"
+    cargo_path: "path to binary for cargo"
+    secret: "globally used default secret"
+    port: "port to listen on, defaults to 5000"
 
 specific:
-	alexander-jackson/fisherman:
-		secret: "specific secret value"
+    alexander-jackson/fisherman:
+        secret: "specific secret value"
 
-	FreddieBrown/dodona:
-		code_root: "/backend"
-		binaries: ["api-server", "dcl"]
+    FreddieBrown/dodona:
+        code_root: "/backend"
+        binaries: ["api-server", "dcl"]
 ```

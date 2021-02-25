@@ -61,7 +61,7 @@ impl Config {
     pub fn resolve_secret(&self, repository: &str) -> Option<&str> {
         self.get_specific_config(repository)
             .and_then(|s| s.secret.as_deref())
-            .or(self.default.secret.as_deref())
+            .or_else(|| self.default.secret.as_deref())
     }
 }
 

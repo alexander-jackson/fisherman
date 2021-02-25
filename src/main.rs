@@ -46,8 +46,7 @@ async fn handle_webhook(
         .headers()
         .get("X-Hub-Signature-256")
         .map(HeaderValue::to_str)
-        .map(Result::ok)
-        .flatten()
+        .and_then(Result::ok)
         .map(str::as_bytes)
         .map(|s| s.split_at(7).1);
 

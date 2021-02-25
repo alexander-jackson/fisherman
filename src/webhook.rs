@@ -43,7 +43,7 @@ impl Webhook {
             &config.default.ssh_private_key,
         )?;
 
-        git::merge(&repo, master_branch, fetch_commit)
+        git::merge(&repo, master_branch, &fetch_commit)
     }
 
     /// Triggers the recompilation of a repository associated with the webhook.

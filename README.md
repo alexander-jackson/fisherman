@@ -1,6 +1,6 @@
 # Fisherman
 
-`fisherman` is a tool for continous delivery of Rust projects.
+`fisherman` is a tool for continuous delivery of Rust projects.
 
 It can be run on a remote server, where it will listen for webhook events being
 sent to it. If these involve pushes to the `master_branch` of a repository, it

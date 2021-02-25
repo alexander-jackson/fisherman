@@ -29,12 +29,21 @@ key at `ssh_private_key` will be used for authentication.
 
 ### Configuration
 
-Configuration for `fisherman` is defined by the `fisherman.toml` file and has
+Configuration for `fisherman` is defined by the `fisherman.yml` file and has
 the following structure:
 
-```toml
-[default]
-ssh_private_key = "path to SSH key for authentication"
-repo_root = "top level directory where repositories are stored"
-cargo_path = "path to binary for cargo"
+```yaml
+default:
+	ssh_private_key: "path to SSH key for authentication"
+	repo_root: "top level directory where repositories are stored"
+	cargo_path: "path to binary for cargo"
+	secret: "globally used default secret"
+
+specific:
+	alexander-jackson/fisherman:
+		secret: "specific secret value"
+
+	FreddieBrown/dodona:
+		code_root: "/backend"
+		binaries: ["api-server", "dcl"]
 ```

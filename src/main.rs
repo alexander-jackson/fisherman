@@ -1,3 +1,4 @@
+use std::net::{Ipv4Addr, SocketAddrV4};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -89,6 +90,10 @@ async fn main() -> actix_web::Result<()> {
 
     log::info!("Using the following config: {:#?}", config);
 
+    // Setup the socket to run on
+    let port = config.default.port.unwrap_or(5000);
+    let socket = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
+
     let server = HttpServer::new(move || {
         let state = State {
             config: Arc::clone(&config),
@@ -98,7 +103,7 @@ async fn main() -> actix_web::Result<()> {
             .data(state)
             .route("/", web::post().to(handle_webhook))
     })
-    .bind("127.0.0.1:5000")?
+    .bind(socket)?
     .run();
 
     server.await?;

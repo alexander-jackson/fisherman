@@ -5,6 +5,8 @@ use std::str::FromStr;
 /// Represents the available options that can be configured.
 #[derive(Debug, Deserialize)]
 pub struct Options {
+    /// The port to listen for messages on, defaulting to 5000 if not specified
+    pub port: Option<u16>,
     /// The path to the SSH private key to use for authentication
     pub ssh_private_key: PathBuf,
     /// The path that contains the repositories

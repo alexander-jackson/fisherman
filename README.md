@@ -22,10 +22,11 @@ cargo build --release
 
 ## Usage
 
-Currently, `fisherman` expects messages to reach it on port `5000`. The
-location of repositories is defined by the `repo_root` field in the
-configuration file. Repositories are also assumed to use SSH, and the private
-key at `ssh_private_key` will be used for authentication.
+By default, `fisherman` expects messages to reach it on port `5000`, although
+this can be changed in the configuration file. The location of repositories is
+defined by the `repo_root` field in the configuration file. Repositories are
+also assumed to use SSH, and the private key at `ssh_private_key` will be used
+for authentication.
 
 ### Configuration
 
@@ -38,6 +39,7 @@ default:
 	repo_root: "top level directory where repositories are stored"
 	cargo_path: "path to binary for cargo"
 	secret: "globally used default secret"
+	port: "port to listen on, defaults to 5000"
 
 specific:
 	alexander-jackson/fisherman:

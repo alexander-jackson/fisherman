@@ -93,6 +93,11 @@ impl Webhook {
 
         Ok(())
     }
+
+    /// Retrieves the full name of the repository this webhook relates to.
+    pub fn get_full_name(&self) -> &str {
+        &self.repository.full_name
+    }
 }
 
 #[derive(Debug, Deserialize)]

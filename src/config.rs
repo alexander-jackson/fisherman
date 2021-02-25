@@ -11,6 +11,8 @@ pub struct Options {
     pub repo_root: PathBuf,
     /// The path to find `cargo` at
     pub cargo_path: PathBuf,
+    /// The secret to use for validating payloads
+    pub secret: Option<String>,
 }
 
 /// Repository specific options such as having multiple binaries
@@ -20,6 +22,8 @@ pub struct SpecificOptions {
     pub code_root: Option<PathBuf>,
     /// The names of the binaries
     pub binaries: Option<Vec<String>>,
+    /// The secret to use for validating payloads
+    pub secret: Option<String>,
 }
 
 /// Represents the structure of the configuration file.
@@ -52,6 +56,12 @@ impl Config {
         }
 
         vec![String::from(repository.split('/').nth(1).unwrap())]
+    }
+
+    pub fn resolve_secret(&self, repository: &str) -> Option<&str> {
+        self.get_specific_config(repository)
+            .and_then(|s| s.secret.as_deref())
+            .or(self.default.secret.as_deref())
     }
 }
 
@@ -151,5 +161,48 @@ specific:
         let binaries = config.resolve_binaries("alexander-jackson/ptc");
 
         assert_eq!(binaries, vec!["ptc"]);
+    }
+
+    #[test]
+    fn config_with_no_secret_assumes_no_security() {
+        let config = Config::from_str(CONFIG).unwrap();
+        let secret = config.resolve_secret("alexander-jackson/ptc");
+
+        assert!(secret.is_none());
+    }
+
+    #[test]
+    fn no_specific_secret_assumes_global_value() {
+        let config = r#"
+        default:
+            ssh_private_key: "/root/.ssh/id_rsa"
+            repo_root: "/root"
+            cargo_path: "/root/.cargo/bin/cargo"
+            secret: "<some secret value>"
+        "#;
+
+        let config = Config::from_str(config).unwrap();
+        let secret = config.resolve_secret("alexander-jackson/ptc");
+
+        assert_eq!(secret, Some("<some secret value>"));
+    }
+
+    #[test]
+    fn specific_secrets_are_used_if_they_exist() {
+        let config = r#"
+        default:
+            ssh_private_key: "/root/.ssh/id_rsa"
+            repo_root: "/root"
+            cargo_path: "/root/.cargo/bin/cargo"
+
+        specific:
+            alexander-jackson/ptc:
+                secret: "<repository specific>"
+        "#;
+
+        let config = Config::from_str(config).unwrap();
+        let secret = config.resolve_secret("alexander-jackson/ptc");
+
+        assert_eq!(secret, Some("<repository specific>"));
     }
 }

@@ -43,7 +43,7 @@ impl Webhook {
             &config.default.ssh_private_key,
         )?;
 
-        git::merge(&repo, master_branch, fetch_commit)
+        git::merge(&repo, master_branch, &fetch_commit)
     }
 
     /// Triggers the recompilation of a repository associated with the webhook.
@@ -92,6 +92,11 @@ impl Webhook {
         }
 
         Ok(())
+    }
+
+    /// Retrieves the full name of the repository this webhook relates to.
+    pub fn get_full_name(&self) -> &str {
+        &self.repository.full_name
     }
 }
 

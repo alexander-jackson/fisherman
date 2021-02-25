@@ -1,7 +1,9 @@
+use std::net::{Ipv4Addr, SocketAddrV4};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use actix_web::{web, App, HttpResponse, HttpServer};
+use actix_web::{http::HeaderValue, web, App, HttpRequest, HttpResponse, HttpServer};
+use tokio_stream::StreamExt;
 
 use crate::config::Config;
 use crate::webhook::Webhook;
@@ -9,6 +11,7 @@ use crate::webhook::Webhook;
 #[macro_use]
 extern crate serde;
 
+mod auth;
 mod config;
 mod git;
 mod logging;
@@ -20,8 +23,40 @@ pub struct State {
     pub config: Arc<Config>,
 }
 
-async fn handle_webhook(state: web::Data<State>, webhook: web::Json<Webhook>) -> HttpResponse {
-    log::debug!("Webhook body: {:?}", &webhook);
+async fn handle_webhook(
+    state: web::Data<State>,
+    mut payload: web::Payload,
+    request: HttpRequest,
+) -> HttpResponse {
+    let mut bytes = web::BytesMut::new();
+
+    while let Some(Ok(item)) = payload.next().await {
+        bytes.extend_from_slice(&item);
+    }
+
+    let webhook: Webhook = serde_json::from_slice(&bytes).unwrap();
+
+    // Validate the payload with the secret key
+    let secret = state
+        .config
+        .resolve_secret(webhook.get_full_name())
+        .map(str::as_bytes);
+
+    // Get the expected value as bytes
+    let expected = request
+        .headers()
+        .get("X-Hub-Signature-256")
+        .map(HeaderValue::to_str)
+        .and_then(Result::ok)
+        .map(str::as_bytes)
+        .map(|s| s.split_at(7).1);
+
+    if let Err(e) = auth::validate_webhook_body(&bytes, secret, expected) {
+        log::error!("Payload failed to validate with secret");
+        return e;
+    }
+
+    log::debug!("Webhook verified: {:?}", &webhook);
 
     if webhook.is_master_push() {
         log::info!("Commits were pushed to `master` in this event");
@@ -55,6 +90,10 @@ async fn main() -> actix_web::Result<()> {
 
     log::info!("Using the following config: {:#?}", config);
 
+    // Setup the socket to run on
+    let port = config.default.port.unwrap_or(5000);
+    let socket = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
+
     let server = HttpServer::new(move || {
         let state = State {
             config: Arc::clone(&config),
@@ -64,7 +103,7 @@ async fn main() -> actix_web::Result<()> {
             .data(state)
             .route("/", web::post().to(handle_webhook))
     })
-    .bind("127.0.0.1:5000")?
+    .bind(socket)?
     .run();
 
     server.await?;

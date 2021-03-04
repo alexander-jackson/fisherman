@@ -46,6 +46,7 @@ specific:
         secret: "specific secret value"
 
     FreddieBrown/dodona:
+        follow: "develop"
         code_root: "/backend"
         binaries: ["api-server", "dcl"]
 ```

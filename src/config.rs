@@ -26,6 +26,8 @@ pub struct SpecificOptions {
     pub binaries: Option<Vec<String>>,
     /// The secret to use for validating payloads
     pub secret: Option<String>,
+    /// The branch to follow for this repository
+    pub follow: Option<String>,
 }
 
 /// Represents the structure of the configuration file.
@@ -41,29 +43,29 @@ impl Config {
     }
 
     pub fn resolve_code_root(&self, repository: &str) -> PathBuf {
-        if let Some(specific) = self.get_specific_config(repository) {
-            if let Some(code_root) = &specific.code_root {
-                return code_root.clone();
-            }
-        }
-
-        PathBuf::new()
+        self.get_specific_config(repository)
+            .and_then(|s| s.code_root.clone())
+            .unwrap_or_default()
     }
 
     pub fn resolve_binaries(&self, repository: &str) -> Vec<String> {
-        if let Some(specific) = self.get_specific_config(repository) {
-            if let Some(binaries) = &specific.binaries {
-                return binaries.clone();
-            }
-        }
-
-        vec![String::from(repository.split('/').nth(1).unwrap())]
+        self.get_specific_config(repository)
+            .and_then(|s| s.binaries.clone())
+            .unwrap_or_else(|| vec![String::from(repository.split('/').nth(1).unwrap())])
     }
 
     pub fn resolve_secret(&self, repository: &str) -> Option<&str> {
         self.get_specific_config(repository)
             .and_then(|s| s.secret.as_deref())
             .or_else(|| self.default.secret.as_deref())
+    }
+
+    pub fn resolve_follow_branch(&self, repository: &str) -> &str {
+        let specific = self
+            .get_specific_config(repository)
+            .and_then(|s| s.follow.as_deref());
+
+        specific.unwrap_or("master")
     }
 }
 
@@ -90,6 +92,7 @@ default:
 
 specific:
     FreddieBrown/dodona:
+        follow: "develop"
         code_root: "/backend"
         binaries: ["api-server", "dcl"]
 
@@ -206,5 +209,21 @@ specific:
         let secret = config.resolve_secret("alexander-jackson/ptc");
 
         assert_eq!(secret, Some("<repository specific>"));
+    }
+
+    #[test]
+    fn master_is_followed_if_unspecified() {
+        let config = Config::from_str(CONFIG).unwrap();
+        let follow_branch = config.resolve_follow_branch("alexander-jackson/ptc");
+
+        assert_eq!(follow_branch, "master");
+    }
+
+    #[test]
+    fn specific_branches_can_be_followed() {
+        let config = Config::from_str(CONFIG).unwrap();
+        let follow_branch = config.resolve_follow_branch("FreddieBrown/dodona");
+
+        assert_eq!(follow_branch, "develop");
     }
 }

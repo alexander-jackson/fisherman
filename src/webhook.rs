@@ -14,10 +14,9 @@ pub struct Webhook {
 }
 
 impl Webhook {
-    /// Checks whether the push request is to the master branch of a repository.
-    pub fn is_master_push(&self) -> bool {
-        let master = &self.repository.master_branch;
-        let formatted = format!("refs/heads/{}", master);
+    /// Checks whether the push request is to the followed branch of a repository.
+    pub fn changes_follow_branch(&self, follow: &str) -> bool {
+        let formatted = format!("refs/heads/{}", follow);
 
         formatted == self.refname
     }

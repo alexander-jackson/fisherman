@@ -58,8 +58,11 @@ async fn handle_webhook(
 
     log::debug!("Webhook verified: {:?}", &webhook);
 
-    if webhook.is_master_push() {
-        log::info!("Commits were pushed to `master` in this event");
+    // Get the branch that this repository follows
+    let follow_branch = state.config.resolve_follow_branch(webhook.get_full_name());
+
+    if webhook.changes_follow_branch(&follow_branch) {
+        log::info!("Commits were pushed to `{}` in this event", follow_branch);
 
         // Pull the new changes
         webhook

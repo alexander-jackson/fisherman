@@ -6,7 +6,6 @@ use actix_web::{http::HeaderValue, web, App, HttpRequest, HttpResponse, HttpServ
 use tokio_stream::StreamExt;
 
 use crate::config::Config;
-use crate::webhook::Webhook;
 
 #[macro_use]
 extern crate serde;
@@ -23,6 +22,46 @@ pub struct State {
     pub config: Arc<Config>,
 }
 
+#[derive(Debug)]
+enum Webhook {
+    Push(webhook::Push),
+    Ping(webhook::Ping),
+}
+
+impl Webhook {
+    /// Gets the full name of the repository this hook refers to.
+    pub fn get_full_name(&self) -> &str {
+        match self {
+            Webhook::Ping(p) => p.get_full_name(),
+            Webhook::Push(p) => p.get_full_name(),
+        }
+    }
+
+    /// Handles the payload of the request depending on its type.
+    pub fn handle(&self, config: &Arc<Config>) -> HttpResponse {
+        match self {
+            Webhook::Ping(p) => p.handle(config),
+            Webhook::Push(p) => p.handle(config),
+        }
+    }
+
+    /// Deserializes JSON from bytes depending on which variant is expected.
+    pub fn from_slice(variant: &str, bytes: &[u8]) -> serde_json::Result<Self> {
+        let webhook = match variant {
+            "push" => Self::Push(serde_json::from_slice(bytes)?),
+            "ping" => Self::Ping(serde_json::from_slice(bytes)?),
+            _ => unreachable!(),
+        };
+
+        Ok(webhook)
+    }
+}
+
+/// Receives messages from GitHub's API and deserializes them before handling.
+///
+/// Reads the content of the payload as a stream of bytes before checking which variant is expected
+/// and deserializing the payload. It then verifies that the included hash is correct for the given
+/// repository before handling the request.
 async fn handle_webhook(
     state: web::Data<State>,
     mut payload: web::Payload,
@@ -34,7 +73,20 @@ async fn handle_webhook(
         bytes.extend_from_slice(&item);
     }
 
-    let webhook: Webhook = serde_json::from_slice(&bytes).unwrap();
+    // Decide the variant to parse based on the headers
+    let variant = match request
+        .headers()
+        .get("X-GitHub-Event")
+        .and_then(|v| v.to_str().ok())
+    {
+        Some(variant) => variant,
+        None => return HttpResponse::BadRequest().finish(),
+    };
+
+    let webhook = match Webhook::from_slice(&variant, &bytes) {
+        Ok(webhook) => webhook,
+        Err(_) => return HttpResponse::UnprocessableEntity().finish(),
+    };
 
     // Validate the payload with the secret key
     let secret = state
@@ -58,29 +110,7 @@ async fn handle_webhook(
 
     log::debug!("Webhook verified: {:?}", &webhook);
 
-    // Get the branch that this repository follows
-    let follow_branch = state.config.resolve_follow_branch(webhook.get_full_name());
-
-    if webhook.changes_follow_branch(&follow_branch) {
-        log::info!("Commits were pushed to `{}` in this event", follow_branch);
-
-        // Pull the new changes
-        webhook
-            .trigger_pull(&state.config)
-            .expect("Failed to execute the pull.");
-
-        // Build the updated binary
-        webhook
-            .trigger_build(&state.config)
-            .expect("Failed to rebuild the binary");
-
-        // Restart in `supervisor`
-        webhook
-            .trigger_restart(&state.config)
-            .expect("Failed to restart the process");
-    }
-
-    HttpResponse::Ok().finish()
+    webhook.handle(&state.config)
 }
 
 #[actix_rt::main]

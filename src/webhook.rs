@@ -1,11 +1,13 @@
 use std::process::Command;
 use std::sync::Arc;
 
+use actix_web::HttpResponse;
+
 use crate::config::Config;
 use crate::git;
 
 #[derive(Debug, Deserialize)]
-pub struct Webhook {
+pub struct Push {
     #[serde(rename = "ref")]
     refname: String,
     before: String,
@@ -13,9 +15,9 @@ pub struct Webhook {
     repository: Repository,
 }
 
-impl Webhook {
+impl Push {
     /// Checks whether the push request is to the followed branch of a repository.
-    pub fn changes_follow_branch(&self, follow: &str) -> bool {
+    fn changes_follow_branch(&self, follow: &str) -> bool {
         let formatted = format!("refs/heads/{}", follow);
 
         formatted == self.refname
@@ -24,12 +26,12 @@ impl Webhook {
     /// Triggers a `git pull` for the repository associated with the webhook.
     ///
     /// This will open the repository, which is assumed to be at `repo_root` and fetch the contents
-    /// of its master branch (which can be `master`, `main` or whatever the default is set to). It
+    /// of its default branch (which can be `master`, `main` or whatever the default is set to). It
     /// will then merge the contents of the fetch.
-    pub fn trigger_pull(&self, config: &Arc<Config>) -> Result<(), git2::Error> {
+    fn trigger_pull(&self, config: &Arc<Config>) -> Result<(), git2::Error> {
         let path = config.default.repo_root.join(&self.repository.name);
         let repo = git2::Repository::open(&path)?;
-        let master_branch = &self.repository.master_branch;
+        let master_branch = &self.repository.default_branch;
 
         log::info!("Fetching changes for the project at: {:?}", path);
 
@@ -49,7 +51,7 @@ impl Webhook {
     ///
     /// This should be run after pulling the new changes to update the repository. After being
     /// rebuilt, it can be restarted in `supervisor` and the new changes will go live.
-    pub fn trigger_build(&self, config: &Arc<Config>) -> std::io::Result<()> {
+    fn trigger_build(&self, config: &Arc<Config>) -> std::io::Result<()> {
         let code_root = config.resolve_code_root(&self.repository.full_name);
         let binaries = config.resolve_binaries(&self.repository.full_name);
 
@@ -78,7 +80,7 @@ impl Webhook {
     ///
     /// Restarts the process within `supervisor`, allowing a new version to supersede the existing
     /// version.
-    pub fn trigger_restart(&self, config: &Arc<Config>) -> std::io::Result<()> {
+    fn trigger_restart(&self, config: &Arc<Config>) -> std::io::Result<()> {
         let binaries = config.resolve_binaries(&self.repository.full_name);
 
         for binary in binaries {
@@ -97,6 +99,52 @@ impl Webhook {
     pub fn get_full_name(&self) -> &str {
         &self.repository.full_name
     }
+
+    pub fn handle(&self, config: &Arc<Config>) -> HttpResponse {
+        // Get the branch that this repository follows
+        let follow_branch = config.resolve_follow_branch(self.get_full_name());
+
+        if self.changes_follow_branch(&follow_branch) {
+            log::info!("Commits were pushed to `{}` in this event", follow_branch);
+
+            // Pull the new changes
+            self.trigger_pull(config)
+                .expect("Failed to execute the pull.");
+
+            // Build the updated binary
+            self.trigger_build(config)
+                .expect("Failed to rebuild the binary");
+
+            // Restart in `supervisor`
+            self.trigger_restart(config)
+                .expect("Failed to restart the process");
+        }
+
+        HttpResponse::Ok().finish()
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Ping {
+    zen: String,
+    hook_id: u32,
+    hook: Hook,
+    repository: Repository,
+}
+
+impl Ping {
+    pub fn get_full_name(&self) -> &str {
+        &self.repository.full_name
+    }
+
+    pub fn handle(&self, _config: &Arc<Config>) -> HttpResponse {
+        let body = format!(
+            "Setup tracking of `{}` at url: {}",
+            self.repository.full_name, self.hook.config.url
+        );
+
+        HttpResponse::Ok().body(body)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -104,5 +152,22 @@ pub struct Repository {
     id: u32,
     name: String,
     full_name: String,
-    master_branch: String,
+    default_branch: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Hook {
+    #[serde(rename = "type")]
+    ty: String,
+    id: u32,
+    name: String,
+    active: bool,
+    events: Vec<String>,
+    config: HookConfig,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HookConfig {
+    content_type: String,
+    url: String,
 }

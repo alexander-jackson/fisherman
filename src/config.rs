@@ -38,28 +38,45 @@ pub struct Config {
 }
 
 impl Config {
+    /// Gets a specific configuration for a repository if it exists.
     fn get_specific_config(&self, repository: &str) -> Option<&SpecificOptions> {
         self.specific.as_ref().and_then(|s| s.get(repository))
     }
 
+    /// Resolves the value of the `code_root` directive.
+    ///
+    /// If a specific value exists for the given repository, that will be used, otherwise the root
+    /// directory of the project will be used, as denoted by an empty [`PathBuf`].
     pub fn resolve_code_root(&self, repository: &str) -> PathBuf {
         self.get_specific_config(repository)
             .and_then(|s| s.code_root.clone())
             .unwrap_or_default()
     }
 
+    /// Resolves the value of the `binaries` directive.
+    ///
+    /// If a specific value exists for the given repository, that will be used, otherwise the name
+    /// of the repository itself will be used.
     pub fn resolve_binaries(&self, repository: &str) -> Vec<String> {
         self.get_specific_config(repository)
             .and_then(|s| s.binaries.clone())
             .unwrap_or_else(|| vec![String::from(repository.split('/').nth(1).unwrap())])
     }
 
+    /// Resolves the value of the `secret` directive.
+    ///
+    /// If a specific value exists for the given repository, that will be used, otherwise no secret
+    /// will be used (as webhooks do not have to have this).
     pub fn resolve_secret(&self, repository: &str) -> Option<&str> {
         self.get_specific_config(repository)
             .and_then(|s| s.secret.as_deref())
             .or_else(|| self.default.secret.as_deref())
     }
 
+    /// Resolves the value of the `follow` directive.
+    ///
+    /// If a specific value exists for the given repository, that will be used, otherwise the
+    /// `master` branch will be used.
     pub fn resolve_follow_branch(&self, repository: &str) -> &str {
         let specific = self
             .get_specific_config(repository)

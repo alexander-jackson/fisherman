@@ -1,37 +1,44 @@
 use std::sync::RwLock;
-use std::{fmt, sync::RwLockReadGuard};
+use std::sync::RwLockReadGuard;
 
 use chrono::Utc;
 
-#[derive(Debug)]
-pub enum Event {
+#[derive(Debug, Serialize)]
+pub enum EventVariant {
     Ping,
     Pull,
-    Build(String),
-    Restart(String),
+    Build,
+    Restart,
 }
 
-impl fmt::Display for Event {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Event::Ping => write!(f, "ping"),
-            Event::Pull => write!(f, "pull"),
-            Event::Build(s) => write!(f, "build: {}", s),
-            Event::Restart(s) => write!(f, "restart: {}", s),
+#[derive(Debug, Serialize)]
+pub struct Event {
+    variant: EventVariant,
+    message: Option<String>,
+}
+
+impl From<EventVariant> for Event {
+    fn from(variant: EventVariant) -> Self {
+        Self {
+            variant,
+            message: None,
         }
     }
 }
 
-#[derive(Debug)]
+impl Event {
+    pub fn with_message(variant: EventVariant, message: String) -> Self {
+        Self {
+            variant,
+            message: Some(message),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
 pub struct TimestampedEvent {
     timestamp: i64,
     event: Event,
-}
-
-impl fmt::Display for TimestampedEvent {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{}] {}", self.timestamp, self.event)
-    }
 }
 
 impl TimestampedEvent {
@@ -45,7 +52,7 @@ impl TimestampedEvent {
 
 type Queue = Vec<TimestampedEvent>;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize)]
 pub struct TimeseriesQueue {
     queue: RwLock<Queue>,
 }

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use actix_web::HttpResponse;
 
 use crate::config::Config;
-use crate::events::{Event, TimeseriesQueue};
+use crate::events::{Event, EventVariant, TimeseriesQueue};
 use crate::git;
 
 #[derive(Debug, Deserialize)]
@@ -44,7 +44,7 @@ impl Push {
             branch
         );
 
-        events.push(Event::Pull);
+        events.push(EventVariant::Pull.into());
 
         let mut remote = repo.find_remote("origin")?;
 
@@ -77,7 +77,7 @@ impl Push {
         for binary in binaries {
             log::info!("Building the binary called: {}", binary);
 
-            events.push(Event::Build(binary.clone()));
+            events.push(Event::with_message(EventVariant::Build, binary.clone()));
 
             Command::new(config.default.cargo_path.clone())
                 .args(&["build", "--release", "--bin", &binary])
@@ -103,7 +103,7 @@ impl Push {
         for binary in binaries {
             log::info!("Allowing `supervisor` to restart: {}", binary);
 
-            events.push(Event::Restart(binary.clone()));
+            events.push(Event::with_message(EventVariant::Restart, binary.clone()));
 
             Command::new("supervisorctl")
                 .args(&["restart", &binary])
@@ -191,7 +191,7 @@ impl Ping {
             self.repository.full_name, self.hook.config.url
         );
 
-        events.push(Event::Ping);
+        events.push(EventVariant::Ping.into());
 
         HttpResponse::Ok().body(body)
     }

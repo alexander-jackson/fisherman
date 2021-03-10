@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+
+		<title>Fisherman Status</title>
+		<meta name="description" content="Current status of Fisherman">
+		<meta name="author" content="Alexander Jackson">
+	</head>
+
+	<body>
+		<table>
+			<thead>
+				<tr>
+					<th>Timestamp</th>
+					<th>Variant</th>
+					<th>Message</th>
+				</tr>
+			</thead>
+			<tbody>
+
+				{% for element in queue %}
+
+					<tr>
+						<td>{{ element.timestamp }}</td>
+						<td>{{ element.event.variant }}</td>
+						<td>{{ element.event.message }}</td>
+					</tr>
+
+				{% endfor %}
+
+			</tbody>
+		</table>
+	</body>
+</html>
+

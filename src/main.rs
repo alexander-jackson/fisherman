@@ -3,6 +3,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use actix_web::{http::HeaderValue, web, App, HttpRequest, HttpResponse, HttpServer};
+use tera::{Context, Tera};
 use tokio_stream::StreamExt;
 
 use crate::config::Config;
@@ -58,17 +59,17 @@ impl Webhook {
     }
 }
 
-async fn status(shared: web::Data<events::TimeseriesQueue>) -> HttpResponse {
+async fn status(tera: web::Data<Tera>, shared: web::Data<events::TimeseriesQueue>) -> HttpResponse {
     // Get a read lock to the queue
     let queue = shared.read();
 
-    let queue_state = queue
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-        .join("\n");
+    // Render the template given the queue
+    let mut context = Context::new();
+    context.insert("queue", &*queue);
 
-    HttpResponse::Ok().body(queue_state)
+    let content = tera.render("status.html.tera", &context).unwrap();
+
+    HttpResponse::Ok().content_type("text/html").body(content)
 }
 
 /// Receives messages from GitHub's API and deserializes them before handling.
@@ -153,8 +154,12 @@ async fn main() -> actix_web::Result<()> {
             config: Arc::clone(&config),
         };
 
+        // Initialise the templating engine
+        let tera = Tera::new(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/**/*")).unwrap();
+
         App::new()
             .data(state)
+            .data(tera)
             .app_data(shared.clone())
             .route("/", web::post().to(handle_webhook))
             .route("/status", web::get().to(status))

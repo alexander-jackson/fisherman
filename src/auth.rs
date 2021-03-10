@@ -9,22 +9,37 @@ pub fn validate_webhook_body(
     secret: Option<&[u8]>,
     expected: Option<&[u8]>,
 ) -> Result<(), HttpResponse> {
-    let (secret, expected) = match (secret, expected) {
-        (Some(secret), Some(expected)) => (secret, hex::decode(expected).unwrap()),
-        (Some(_), None) => {
-            return Err(HttpResponse::BadRequest().body("Found a secret but no expected value"))
-        }
-        (None, Some(_)) => {
-            return Err(HttpResponse::BadRequest().body("Found an expected value but no secret"))
-        }
-        (None, None) => return Ok(()),
+    // We don't have a secret and we didn't expect one either
+    if secret.or(expected).is_none() {
+        return Ok(());
+    }
+
+    // We have a secret and something to check, so verify it
+    if let (Some(secret), Some(expected)) = (secret, expected) {
+        // Decode the expected from hex to bytes
+        let decoded = hex::decode(expected).unwrap();
+
+        let mut mac = HmacSha256::new_varkey(secret).expect("HMAC can take key of any size");
+
+        mac.update(bytes);
+
+        return mac.verify(&decoded).map_err(|_| {
+            HttpResponse::Unauthorized().body("Secret failed to authorise the payload")
+        });
+    }
+
+    // secret.xor(expected) is `Some`, so return an appropriate error message
+    let response = if secret.is_some() {
+        HttpResponse::BadRequest().body(
+            "The configuration file contained a secret for this repository, but the incoming request was not signed.",
+        )
+    } else {
+        HttpResponse::BadRequest().body(
+            "The incoming request was signed, but the configuration file did not contain a related secret.",
+        )
     };
 
-    let mut mac = HmacSha256::new_varkey(secret).expect("HMAC can take key of any size");
-
-    mac.update(bytes);
-    mac.verify(&expected)
-        .map_err(|_| HttpResponse::Unauthorized().body("Secret failed to authorise the payload"))
+    Err(response)
 }
 
 #[cfg(test)]

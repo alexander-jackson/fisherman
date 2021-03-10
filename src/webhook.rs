@@ -4,8 +4,8 @@ use std::sync::Arc;
 use actix_web::HttpResponse;
 
 use crate::config::Config;
+use crate::events::{Event, TimeseriesQueue};
 use crate::git;
-use crate::{Event, TimeseriesQueue, TimestampedEvent};
 
 #[derive(Debug, Deserialize)]
 pub struct Push {
@@ -29,7 +29,11 @@ impl Push {
     /// This will open the repository, which is assumed to be at `repo_root` and fetch the contents
     /// of its default branch (which can be `master`, `main` or whatever the default is set to). It
     /// will then merge the contents of the fetch.
-    fn trigger_pull(&self, config: &Arc<Config>) -> Result<(), git2::Error> {
+    fn trigger_pull(
+        &self,
+        config: &Arc<Config>,
+        events: &TimeseriesQueue,
+    ) -> Result<(), git2::Error> {
         let path = config.default.repo_root.join(&self.repository.name);
         let repo = git2::Repository::open(&path)?;
         let branch = config.resolve_follow_branch(&self.repository.full_name);
@@ -39,6 +43,8 @@ impl Push {
             path,
             branch
         );
+
+        events.push(Event::Pull);
 
         let mut remote = repo.find_remote("origin")?;
 
@@ -56,7 +62,7 @@ impl Push {
     ///
     /// This should be run after pulling the new changes to update the repository. After being
     /// rebuilt, it can be restarted in `supervisor` and the new changes will go live.
-    fn trigger_build(&self, config: &Arc<Config>) -> std::io::Result<()> {
+    fn trigger_build(&self, config: &Arc<Config>, events: &TimeseriesQueue) -> std::io::Result<()> {
         let code_root = config.resolve_code_root(&self.repository.full_name);
         let binaries = config.resolve_binaries(&self.repository.full_name);
 
@@ -70,6 +76,8 @@ impl Push {
 
         for binary in binaries {
             log::info!("Building the binary called: {}", binary);
+
+            events.push(Event::Build(binary.clone()));
 
             Command::new(config.default.cargo_path.clone())
                 .args(&["build", "--release", "--bin", &binary])
@@ -85,11 +93,17 @@ impl Push {
     ///
     /// Restarts the process within `supervisor`, allowing a new version to supersede the existing
     /// version.
-    fn trigger_restart(&self, config: &Arc<Config>) -> std::io::Result<()> {
+    fn trigger_restart(
+        &self,
+        config: &Arc<Config>,
+        events: &TimeseriesQueue,
+    ) -> std::io::Result<()> {
         let binaries = config.resolve_binaries(&self.repository.full_name);
 
         for binary in binaries {
             log::info!("Allowing `supervisor` to restart: {}", binary);
+
+            events.push(Event::Restart(binary.clone()));
 
             Command::new("supervisorctl")
                 .args(&["restart", &binary])
@@ -138,15 +152,15 @@ impl Push {
             log::info!("Commits were pushed to `{}` in this event", follow_branch);
 
             // Pull the new changes
-            self.trigger_pull(config)
+            self.trigger_pull(config, events)
                 .expect("Failed to execute the pull.");
 
             // Build the updated binary
-            self.trigger_build(config)
+            self.trigger_build(config, events)
                 .expect("Failed to rebuild the binary");
 
             // Restart in `supervisor`
-            self.trigger_restart(config)
+            self.trigger_restart(config, events)
                 .expect("Failed to restart the process");
 
             // Run any additional commands
@@ -177,9 +191,7 @@ impl Ping {
             self.repository.full_name, self.hook.config.url
         );
 
-        let event = TimestampedEvent::new(Event::Ping);
-        let mut writer = events.write().unwrap();
-        writer.push(event);
+        events.push(Event::Ping);
 
         HttpResponse::Ok().body(body)
     }

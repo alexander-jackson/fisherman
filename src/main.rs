@@ -1,10 +1,8 @@
-use std::fmt;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::str::FromStr;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use actix_web::{http::HeaderValue, web, App, HttpRequest, HttpResponse, HttpServer};
-use chrono::Utc;
 use tokio_stream::StreamExt;
 
 use crate::config::Config;
@@ -14,6 +12,7 @@ extern crate serde;
 
 mod auth;
 mod config;
+mod events;
 mod git;
 mod logging;
 mod webhook;
@@ -23,42 +22,6 @@ mod webhook;
 pub struct State {
     pub config: Arc<Config>,
 }
-
-#[derive(Debug)]
-pub enum Event {
-    Ping,
-}
-
-impl fmt::Display for Event {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Event::Ping => write!(f, "ping"),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct TimestampedEvent {
-    timestamp: i64,
-    event: Event,
-}
-
-impl fmt::Display for TimestampedEvent {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{}] {}", self.timestamp, self.event)
-    }
-}
-
-impl TimestampedEvent {
-    pub fn new(event: Event) -> Self {
-        // Get the current timestamp
-        let timestamp = Utc::now().timestamp();
-
-        Self { timestamp, event }
-    }
-}
-
-pub type TimeseriesQueue = RwLock<Vec<TimestampedEvent>>;
 
 #[derive(Debug)]
 enum Webhook {
@@ -76,7 +39,7 @@ impl Webhook {
     }
 
     /// Handles the payload of the request depending on its type.
-    pub fn handle(&self, config: &Arc<Config>, events: &TimeseriesQueue) -> HttpResponse {
+    pub fn handle(&self, config: &Arc<Config>, events: &events::TimeseriesQueue) -> HttpResponse {
         match self {
             Webhook::Ping(p) => p.handle(config, events),
             Webhook::Push(p) => p.handle(config, events),
@@ -95,9 +58,9 @@ impl Webhook {
     }
 }
 
-async fn status(shared: web::Data<TimeseriesQueue>) -> HttpResponse {
+async fn status(shared: web::Data<events::TimeseriesQueue>) -> HttpResponse {
     // Get a read lock to the queue
-    let queue = shared.read().unwrap();
+    let queue = shared.read();
 
     let queue_state = queue
         .iter()
@@ -115,7 +78,7 @@ async fn status(shared: web::Data<TimeseriesQueue>) -> HttpResponse {
 /// repository before handling the request.
 async fn handle_webhook(
     state: web::Data<State>,
-    shared: web::Data<TimeseriesQueue>,
+    shared: web::Data<events::TimeseriesQueue>,
     mut payload: web::Payload,
     request: HttpRequest,
 ) -> HttpResponse {
@@ -183,7 +146,7 @@ async fn main() -> actix_web::Result<()> {
     let socket = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
 
     // Create some shared state
-    let shared = web::Data::new(TimeseriesQueue::default());
+    let shared = web::Data::new(events::TimeseriesQueue::default());
 
     let server = HttpServer::new(move || {
         let state = State {

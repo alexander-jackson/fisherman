@@ -1,8 +1,10 @@
+use std::fmt;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use actix_web::{http::HeaderValue, web, App, HttpRequest, HttpResponse, HttpServer};
+use chrono::Utc;
 use tokio_stream::StreamExt;
 
 use crate::config::Config;
@@ -23,6 +25,42 @@ pub struct State {
 }
 
 #[derive(Debug)]
+pub enum Event {
+    Ping,
+}
+
+impl fmt::Display for Event {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Event::Ping => write!(f, "ping"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct TimestampedEvent {
+    timestamp: i64,
+    event: Event,
+}
+
+impl fmt::Display for TimestampedEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[{}] {}", self.timestamp, self.event)
+    }
+}
+
+impl TimestampedEvent {
+    pub fn new(event: Event) -> Self {
+        // Get the current timestamp
+        let timestamp = Utc::now().timestamp();
+
+        Self { timestamp, event }
+    }
+}
+
+pub type TimeseriesQueue = RwLock<Vec<TimestampedEvent>>;
+
+#[derive(Debug)]
 enum Webhook {
     Push(webhook::Push),
     Ping(webhook::Ping),
@@ -38,10 +76,10 @@ impl Webhook {
     }
 
     /// Handles the payload of the request depending on its type.
-    pub fn handle(&self, config: &Arc<Config>) -> HttpResponse {
+    pub fn handle(&self, config: &Arc<Config>, events: &TimeseriesQueue) -> HttpResponse {
         match self {
-            Webhook::Ping(p) => p.handle(config),
-            Webhook::Push(p) => p.handle(config),
+            Webhook::Ping(p) => p.handle(config, events),
+            Webhook::Push(p) => p.handle(config, events),
         }
     }
 
@@ -57,6 +95,19 @@ impl Webhook {
     }
 }
 
+async fn status(shared: web::Data<TimeseriesQueue>) -> HttpResponse {
+    // Get a read lock to the queue
+    let queue = shared.read().unwrap();
+
+    let queue_state = queue
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    HttpResponse::Ok().body(queue_state)
+}
+
 /// Receives messages from GitHub's API and deserializes them before handling.
 ///
 /// Reads the content of the payload as a stream of bytes before checking which variant is expected
@@ -64,6 +115,7 @@ impl Webhook {
 /// repository before handling the request.
 async fn handle_webhook(
     state: web::Data<State>,
+    shared: web::Data<TimeseriesQueue>,
     mut payload: web::Payload,
     request: HttpRequest,
 ) -> HttpResponse {
@@ -85,7 +137,10 @@ async fn handle_webhook(
 
     let webhook = match Webhook::from_slice(&variant, &bytes) {
         Ok(webhook) => webhook,
-        Err(_) => return HttpResponse::UnprocessableEntity().finish(),
+        Err(e) => {
+            log::warn!("Error deserializing: {}", e);
+            return HttpResponse::UnprocessableEntity().finish();
+        }
     };
 
     // Validate the payload with the secret key
@@ -110,7 +165,7 @@ async fn handle_webhook(
 
     log::debug!("Webhook verified: {:?}", &webhook);
 
-    webhook.handle(&state.config)
+    webhook.handle(&state.config, &shared)
 }
 
 #[actix_rt::main]
@@ -127,6 +182,9 @@ async fn main() -> actix_web::Result<()> {
     let port = config.default.port.unwrap_or(5000);
     let socket = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
 
+    // Create some shared state
+    let shared = web::Data::new(TimeseriesQueue::default());
+
     let server = HttpServer::new(move || {
         let state = State {
             config: Arc::clone(&config),
@@ -134,7 +192,9 @@ async fn main() -> actix_web::Result<()> {
 
         App::new()
             .data(state)
+            .app_data(shared.clone())
             .route("/", web::post().to(handle_webhook))
+            .route("/status", web::get().to(status))
     })
     .bind(socket)?
     .run();

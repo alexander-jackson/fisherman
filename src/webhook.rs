@@ -5,6 +5,7 @@ use actix_web::HttpResponse;
 
 use crate::config::Config;
 use crate::git;
+use crate::{Event, TimeseriesQueue, TimestampedEvent};
 
 #[derive(Debug, Deserialize)]
 pub struct Push {
@@ -129,7 +130,7 @@ impl Push {
         &self.repository.full_name
     }
 
-    pub fn handle(&self, config: &Arc<Config>) -> HttpResponse {
+    pub fn handle(&self, config: &Arc<Config>, events: &TimeseriesQueue) -> HttpResponse {
         // Get the branch that this repository follows
         let follow_branch = config.resolve_follow_branch(self.get_full_name());
 
@@ -170,11 +171,15 @@ impl Ping {
         &self.repository.full_name
     }
 
-    pub fn handle(&self, _config: &Arc<Config>) -> HttpResponse {
+    pub fn handle(&self, _config: &Arc<Config>, events: &TimeseriesQueue) -> HttpResponse {
         let body = format!(
             "Setup tracking of `{}` at url: {}",
             self.repository.full_name, self.hook.config.url
         );
+
+        let event = TimestampedEvent::new(Event::Ping);
+        let mut writer = events.write().unwrap();
+        writer.push(event);
 
         HttpResponse::Ok().body(body)
     }

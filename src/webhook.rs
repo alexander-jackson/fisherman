@@ -31,20 +31,24 @@ impl Push {
     fn trigger_pull(&self, config: &Arc<Config>) -> Result<(), git2::Error> {
         let path = config.default.repo_root.join(&self.repository.name);
         let repo = git2::Repository::open(&path)?;
-        let master_branch = &self.repository.default_branch;
+        let branch = config.resolve_follow_branch(&self.repository.full_name);
 
-        log::info!("Fetching changes for the project at: {:?}", path);
+        log::info!(
+            "Fetching changes for the project at `{:?}` on branch `{}`",
+            path,
+            branch
+        );
 
         let mut remote = repo.find_remote("origin")?;
 
         let fetch_commit = git::fetch(
             &repo,
-            &[master_branch],
+            &[branch],
             &mut remote,
             &config.default.ssh_private_key,
         )?;
 
-        git::merge(&repo, master_branch, &fetch_commit)
+        git::merge(&repo, branch, &fetch_commit)
     }
 
     /// Triggers the recompilation of a repository associated with the webhook.

@@ -43,7 +43,7 @@ pub fn fetch<'a>(
     }
 
     let fetch_head = repo.find_reference("FETCH_HEAD")?;
-    Ok(repo.reference_to_annotated_commit(&fetch_head)?)
+    repo.reference_to_annotated_commit(&fetch_head)
 }
 
 /// Performs a fast-forward merge on a repository.

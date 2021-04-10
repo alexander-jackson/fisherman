@@ -17,6 +17,15 @@ pub struct Options {
     pub secret: Option<String>,
 }
 
+/// Components of a command to be run after restarting binaries.
+#[derive(Debug, Deserialize)]
+pub struct Command {
+    /// The program name
+    pub program: String,
+    /// The arguments to the program, if there are any
+    pub args: Option<Vec<String>>,
+}
+
 /// Repository specific options such as having multiple binaries
 #[derive(Debug, Deserialize)]
 pub struct SpecificOptions {
@@ -28,6 +37,8 @@ pub struct SpecificOptions {
     pub secret: Option<String>,
     /// The branch to follow for this repository
     pub follow: Option<String>,
+    /// The commands to execute at the end of processing
+    pub commands: Option<Vec<Command>>,
 }
 
 /// Represents the structure of the configuration file.
@@ -83,6 +94,14 @@ impl Config {
             .and_then(|s| s.follow.as_deref());
 
         specific.unwrap_or("master")
+    }
+
+    /// Resolves the value of the `commands` directive.
+    ///
+    /// If a specific value exists, it will be returned, otherwise nothing will be returned.
+    pub fn resolve_commands(&self, repository: &str) -> Option<&Vec<Command>> {
+        self.get_specific_config(repository)
+            .and_then(|s| s.commands.as_ref())
     }
 }
 

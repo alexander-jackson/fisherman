@@ -99,6 +99,37 @@ impl Push {
         Ok(())
     }
 
+    /// Runs any additional commands specified in the config.
+    ///
+    /// Commands will be run in the `code_root` directory and will simply be executed by the shell.
+    fn run_additional_commands(&self, config: &Arc<Config>) -> std::io::Result<()> {
+        if let Some(commands) = config.resolve_commands(&self.repository.full_name) {
+            let code_root = config.resolve_code_root(&self.repository.full_name);
+
+            let path = &config
+                .default
+                .repo_root
+                .join(&self.repository.name)
+                .join(&code_root);
+
+            log::debug!("Running commands at: {:?}", path);
+
+            for command in commands {
+                log::info!("Executing: {:?}", command);
+
+                let mut to_execute = Command::new(&command.program);
+
+                if let Some(args) = command.args.as_ref() {
+                    to_execute.args(args);
+                }
+
+                to_execute.current_dir(&path).spawn()?.wait()?;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Retrieves the full name of the repository this webhook relates to.
     pub fn get_full_name(&self) -> &str {
         &self.repository.full_name
@@ -122,6 +153,10 @@ impl Push {
             // Restart in `supervisor`
             self.trigger_restart(config)
                 .expect("Failed to restart the process");
+
+            // Run any additional commands
+            self.run_additional_commands(config)
+                .expect("Failed to run additional commands");
         }
 
         HttpResponse::Ok().finish()

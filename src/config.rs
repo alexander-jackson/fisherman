@@ -24,6 +24,8 @@ pub struct Command {
     pub program: String,
     /// The arguments to the program, if there are any
     pub args: Option<Vec<String>>,
+    /// The working directory for the command, relative to the base of the repository
+    pub working_dir: Option<PathBuf>,
 }
 
 /// Repository specific options such as having multiple binaries

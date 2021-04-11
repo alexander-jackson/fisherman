@@ -104,18 +104,12 @@ impl Push {
     /// Commands will be run in the `code_root` directory and will simply be executed by the shell.
     fn run_additional_commands(&self, config: &Arc<Config>) -> std::io::Result<()> {
         if let Some(commands) = config.resolve_commands(&self.repository.full_name) {
-            let code_root = config.resolve_code_root(&self.repository.full_name);
-
-            let path = &config
-                .default
-                .repo_root
-                .join(&self.repository.name)
-                .join(&code_root);
-
-            log::debug!("Running commands at: {:?}", path);
+            let repo_path = config.default.repo_root.join(&self.repository.name);
 
             for command in commands {
-                log::info!("Executing: {:?}", command);
+                let working_dir = repo_path.join(command.working_dir.clone().unwrap_or_default());
+
+                log::info!("Executing: {:?} at {:?}", command, working_dir);
 
                 let mut to_execute = Command::new(&command.program);
 
@@ -123,7 +117,7 @@ impl Push {
                     to_execute.args(args);
                 }
 
-                to_execute.current_dir(&path).spawn()?.wait()?;
+                to_execute.current_dir(&working_dir).spawn()?.wait()?;
             }
         }
 

@@ -123,6 +123,8 @@ async fn main() -> actix_web::Result<()> {
 
     log::info!("Using the following config: {:#?}", config);
 
+    config.check_for_potential_mistakes();
+
     // Setup the socket to run on
     let port = config.default.port.unwrap_or(5000);
     let socket = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);

@@ -43,6 +43,19 @@ pub struct SpecificOptions {
     pub commands: Option<Vec<Command>>,
 }
 
+impl SpecificOptions {
+    /// Checks whether there are any likely mistakes in the config.
+    pub fn check_for_potential_mistakes(&self, key: &str) {
+        if matches!(self.code_root.as_ref(), Some(path) if path.is_absolute()) {
+            log::warn!(
+                "code_root={:?} for key={} is absolute but it should be relative",
+                self.code_root,
+                key
+            );
+        }
+    }
+}
+
 /// Represents the structure of the configuration file.
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -54,6 +67,36 @@ impl Config {
     /// Gets a specific configuration for a repository if it exists.
     fn get_specific_config(&self, repository: &str) -> Option<&SpecificOptions> {
         self.specific.as_ref().and_then(|s| s.get(repository))
+    }
+
+    /// Checks whether there are any likely mistakes in the config.
+    pub fn check_for_potential_mistakes(&self) {
+        let default = &self.default;
+
+        // Check the key, root and Cargo binary exist
+        if !default.ssh_private_key.is_file() {
+            log::warn!(
+                "ssh_private_key={:?} does not exist or is not a file",
+                default.ssh_private_key
+            );
+        }
+
+        if !default.repo_root.exists() {
+            log::warn!("repo_root={:?} does not exist", default.repo_root);
+        }
+
+        if !default.cargo_path.is_file() {
+            log::warn!(
+                "cargo_path={:?} does not exist or is not a file",
+                default.cargo_path
+            );
+        }
+
+        if let Some(specific) = self.specific.as_ref() {
+            for (key, options) in specific {
+                options.check_for_potential_mistakes(&key);
+            }
+        }
     }
 
     /// Resolves the value of the `code_root` directive.

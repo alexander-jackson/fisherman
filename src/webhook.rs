@@ -2,9 +2,25 @@ use std::process::Command;
 use std::sync::Arc;
 
 use actix_web::HttpResponse;
+use serenity::http::client::Http;
+use serenity::model::id::ChannelId;
 
 use crate::config::Config;
 use crate::git;
+
+#[derive(Debug, Deserialize)]
+pub struct User {
+    name: String,
+    email: String,
+    username: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Commit {
+    id: String,
+    message: String,
+    author: User,
+}
 
 #[derive(Debug, Deserialize)]
 pub struct Push {
@@ -13,6 +29,7 @@ pub struct Push {
     before: String,
     after: String,
     repository: Repository,
+    head_commit: Commit,
 }
 
 impl Push {
@@ -124,12 +141,46 @@ impl Push {
         Ok(())
     }
 
+    /// Notifies a Discord channel of the changes if a configuration exists.
+    async fn notify_discord_channel(&self, config: &Arc<Config>) {
+        let discord = match config.default.discord.as_ref() {
+            Some(discord) => discord,
+            None => return,
+        };
+
+        // Create a new instance of the client
+        let client = Http::new_with_token(&discord.token);
+        let channel_id = ChannelId(discord.channel_id);
+
+        // Generate the message to send
+        let brief = self
+            .head_commit
+            .message
+            .lines()
+            .next()
+            .expect("Empty commit");
+
+        let repository = &self.repository.full_name;
+        let author = &self.head_commit.author.name;
+        let commit_id = &self.head_commit.id[..8];
+
+        let message = format!(
+            "Production instance of `{}` has been successfully updated to `commit_id={}` (`{}`), authored by {}",
+            repository, commit_id, brief, author
+        );
+
+        channel_id
+            .send_message(&client, |m| m.content(message))
+            .await
+            .expect("Failed to send the message to the channel");
+    }
+
     /// Retrieves the full name of the repository this webhook relates to.
     pub fn get_full_name(&self) -> &str {
         &self.repository.full_name
     }
 
-    pub fn handle(&self, config: &Arc<Config>) -> HttpResponse {
+    pub async fn handle(&self, config: &Arc<Config>) -> HttpResponse {
         // Get the branch that this repository follows
         let follow_branch = config.resolve_follow_branch(self.get_full_name());
 
@@ -153,6 +204,9 @@ impl Push {
                 .expect("Failed to run additional commands");
         }
 
+        // Everything worked, so update the Discord channel if there is one
+        self.notify_discord_channel(config).await;
+
         HttpResponse::Ok().finish()
     }
 }
@@ -170,7 +224,7 @@ impl Ping {
         &self.repository.full_name
     }
 
-    pub fn handle(&self, _config: &Arc<Config>) -> HttpResponse {
+    pub async fn handle(&self, _config: &Arc<Config>) -> HttpResponse {
         let body = format!(
             "Setup tracking of `{}` at url: {}",
             self.repository.full_name, self.hook.config.url

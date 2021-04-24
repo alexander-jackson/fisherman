@@ -38,10 +38,10 @@ impl Webhook {
     }
 
     /// Handles the payload of the request depending on its type.
-    pub fn handle(&self, config: &Arc<Config>) -> HttpResponse {
+    pub async fn handle(&self, config: &Arc<Config>) -> HttpResponse {
         match self {
-            Webhook::Ping(p) => p.handle(config),
-            Webhook::Push(p) => p.handle(config),
+            Webhook::Ping(p) => p.handle(config).await,
+            Webhook::Push(p) => p.handle(config).await,
         }
     }
 
@@ -110,7 +110,7 @@ async fn handle_webhook(
 
     log::debug!("Webhook verified: {:?}", &webhook);
 
-    webhook.handle(&state.config)
+    webhook.handle(&state.config).await
 }
 
 #[actix_rt::main]

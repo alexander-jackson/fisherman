@@ -2,6 +2,15 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+/// Represents the configuration for Discord notifications
+#[derive(Debug, Deserialize)]
+pub struct DiscordConfig {
+    /// The bot token to use for messages
+    pub token: String,
+    /// The channel identifier to send messages to
+    pub channel_id: u64,
+}
+
 /// Represents the available options that can be configured.
 #[derive(Debug, Deserialize)]
 pub struct Options {
@@ -15,6 +24,8 @@ pub struct Options {
     pub cargo_path: PathBuf,
     /// The secret to use for validating payloads
     pub secret: Option<String>,
+    /// The configuration to use for Discord notifications
+    pub discord: Option<DiscordConfig>,
 }
 
 /// Components of a command to be run after restarting binaries.

@@ -3,6 +3,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use actix_web::{http::HeaderValue, web, App, HttpRequest, HttpResponse, HttpServer};
+use tokio::sync::{mpsc, Mutex};
 use tokio_stream::StreamExt;
 
 use crate::config::Config;
@@ -18,8 +19,9 @@ mod webhook;
 
 /// Defines the state that each request can access.
 #[derive(Clone, Debug)]
-pub struct State {
+struct State {
     pub config: Arc<Config>,
+    pub sender: Arc<Mutex<mpsc::UnboundedSender<Webhook>>>,
 }
 
 #[derive(Debug)]
@@ -62,7 +64,7 @@ impl Webhook {
 /// Reads the content of the payload as a stream of bytes before checking which variant is expected
 /// and deserializing the payload. It then verifies that the included hash is correct for the given
 /// repository before handling the request.
-async fn handle_webhook(
+async fn verify_incoming_webhooks(
     state: web::Data<State>,
     mut payload: web::Payload,
     request: HttpRequest,
@@ -110,7 +112,22 @@ async fn handle_webhook(
 
     log::debug!("Webhook verified: {:?}", &webhook);
 
-    webhook.handle(&state.config).await
+    // Send the message to the other thread
+    let guard = state.sender.lock().await;
+    guard.send(webhook).unwrap();
+
+    // Return a `Processing` status code
+    HttpResponse::Processing().finish()
+}
+
+async fn process_webhooks(config: Arc<Config>, mut receiver: mpsc::UnboundedReceiver<Webhook>) {
+    loop {
+        // Read a webhook message from the channel
+        let webhook = receiver.recv().await.unwrap();
+
+        // Process its content
+        webhook.handle(&config).await;
+    }
 }
 
 #[actix_rt::main]
@@ -129,14 +146,24 @@ async fn main() -> actix_web::Result<()> {
     let port = config.default.port.unwrap_or(5000);
     let socket = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
 
+    let (sender, receiver) = mpsc::unbounded_channel();
+    let sender = Arc::new(Mutex::new(sender));
+
+    let config_clone = Arc::clone(&config);
+
+    tokio::spawn(async move {
+        process_webhooks(config_clone, receiver).await;
+    });
+
     let server = HttpServer::new(move || {
         let state = State {
             config: Arc::clone(&config),
+            sender: Arc::clone(&sender),
         };
 
         App::new()
             .data(state)
-            .route("/", web::post().to(handle_webhook))
+            .route("/", web::post().to(verify_incoming_webhooks))
     })
     .bind(socket)?
     .run();

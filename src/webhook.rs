@@ -1,9 +1,9 @@
-use std::process::Command;
 use std::sync::Arc;
 
 use actix_web::HttpResponse;
 use serenity::http::client::Http;
 use serenity::model::id::ChannelId;
+use tokio::process::Command;
 
 use crate::config::Config;
 use crate::git;
@@ -72,7 +72,7 @@ impl Push {
     ///
     /// This should be run after pulling the new changes to update the repository. After being
     /// rebuilt, it can be restarted in `supervisor` and the new changes will go live.
-    fn trigger_build(&self, config: &Arc<Config>) -> std::io::Result<()> {
+    async fn trigger_build(&self, config: &Arc<Config>) -> std::io::Result<()> {
         let code_root = config.resolve_code_root(&self.repository.full_name);
         let binaries = config.resolve_binaries(&self.repository.full_name);
 
@@ -91,7 +91,8 @@ impl Push {
                 .args(&["build", "--release", "--bin", &binary])
                 .current_dir(&path)
                 .spawn()?
-                .wait()?;
+                .wait()
+                .await?;
         }
 
         Ok(())
@@ -101,7 +102,7 @@ impl Push {
     ///
     /// Restarts the process within `supervisor`, allowing a new version to supersede the existing
     /// version.
-    fn trigger_restart(&self, config: &Arc<Config>) -> std::io::Result<()> {
+    async fn trigger_restart(&self, config: &Arc<Config>) -> std::io::Result<()> {
         let binaries = config.resolve_binaries(&self.repository.full_name);
 
         for binary in binaries {
@@ -110,7 +111,8 @@ impl Push {
             Command::new("supervisorctl")
                 .args(&["restart", &binary])
                 .spawn()?
-                .wait()?;
+                .wait()
+                .await?;
         }
 
         Ok(())
@@ -119,7 +121,7 @@ impl Push {
     /// Runs any additional commands specified in the config.
     ///
     /// Commands will be run in the `code_root` directory and will simply be executed by the shell.
-    fn run_additional_commands(&self, config: &Arc<Config>) -> std::io::Result<()> {
+    async fn run_additional_commands(&self, config: &Arc<Config>) -> std::io::Result<()> {
         if let Some(commands) = config.resolve_commands(&self.repository.full_name) {
             let repo_path = config.default.repo_root.join(&self.repository.name);
 
@@ -134,7 +136,7 @@ impl Push {
                     to_execute.args(args);
                 }
 
-                to_execute.current_dir(&working_dir).spawn()?.wait()?;
+                to_execute.current_dir(&working_dir).spawn()?.wait().await?;
             }
         }
 
@@ -193,14 +195,17 @@ impl Push {
 
             // Build the updated binary
             self.trigger_build(config)
+                .await
                 .expect("Failed to rebuild the binary");
 
             // Restart in `supervisor`
             self.trigger_restart(config)
+                .await
                 .expect("Failed to restart the process");
 
             // Run any additional commands
             self.run_additional_commands(config)
+                .await
                 .expect("Failed to run additional commands");
 
             // Everything worked, so update the Discord channel if there is one

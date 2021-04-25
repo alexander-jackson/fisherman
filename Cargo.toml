@@ -22,7 +22,7 @@ serenity = "0.10.5"
 
 [dependencies.tokio]
 version = "1.2.0"
-features = ["macros", "rt-multi-thread"]
+features = ["macros", "rt-multi-thread", "process"]
 
 [dependencies.serde]
 version = "1.0.123"

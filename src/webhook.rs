@@ -202,10 +202,10 @@ impl Push {
             // Run any additional commands
             self.run_additional_commands(config)
                 .expect("Failed to run additional commands");
-        }
 
-        // Everything worked, so update the Discord channel if there is one
-        self.notify_discord_channel(config).await;
+            // Everything worked, so update the Discord channel if there is one
+            self.notify_discord_channel(config).await;
+        }
 
         HttpResponse::Ok().finish()
     }

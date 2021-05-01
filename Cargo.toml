@@ -25,7 +25,7 @@ version = "1.2.0"
 features = ["macros", "rt-multi-thread", "process"]
 
 [dependencies.serde]
-version = "1.0.123"
+version = "1.0.125"
 features = ["derive"]
 
 [dependencies.fern]

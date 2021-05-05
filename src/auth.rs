@@ -19,7 +19,7 @@ pub fn validate_webhook_body(
         // Decode the expected from hex to bytes
         let decoded = hex::decode(expected).unwrap();
 
-        let mut mac = HmacSha256::new_varkey(secret).expect("HMAC can take key of any size");
+        let mut mac = HmacSha256::new_from_slice(secret).expect("HMAC can take key of any size");
 
         mac.update(bytes);
 

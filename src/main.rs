@@ -139,8 +139,8 @@ async fn verify_incoming_webhooks(
     let guard = state.sender.lock().await;
     guard.send(webhook).unwrap();
 
-    // Return a `Processing` status code
-    Ok(HttpResponse::Processing().finish())
+    // Return an `Accepted` status code
+    Ok(HttpResponse::Accepted().finish())
 }
 
 async fn process_webhooks(config: Arc<Config>, mut receiver: mpsc::UnboundedReceiver<Webhook>) {

@@ -1,6 +1,7 @@
-use actix_web::HttpResponse;
 use hmac::{Hmac, Mac, NewMac};
 use sha2::Sha256;
+
+use crate::error::ServerError;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -8,7 +9,7 @@ pub fn validate_webhook_body(
     bytes: &[u8],
     secret: Option<&[u8]>,
     expected: Option<&[u8]>,
-) -> Result<(), HttpResponse> {
+) -> Result<(), ServerError> {
     // We don't have a secret and we didn't expect one either
     if secret.or(expected).is_none() {
         return Ok(());
@@ -23,23 +24,12 @@ pub fn validate_webhook_body(
 
         mac.update(bytes);
 
-        return mac.verify(&decoded).map_err(|_| {
-            HttpResponse::Unauthorized().body("Secret failed to authorise the payload")
-        });
+        return mac.verify(&decoded).map_err(|_| ServerError::Unauthorized);
     }
 
-    // secret.xor(expected) is `Some`, so return an appropriate error message
-    let response = if secret.is_some() {
-        HttpResponse::BadRequest().body(
-            "The configuration file contained a secret for this repository, but the incoming request was not signed.",
-        )
-    } else {
-        HttpResponse::BadRequest().body(
-            "The incoming request was signed, but the configuration file did not contain a related secret.",
-        )
-    };
+    log::error!("Payload failed to validate with secret");
 
-    Err(response)
+    Err(ServerError::Unauthorized)
 }
 
 #[cfg(test)]

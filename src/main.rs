@@ -1,18 +1,23 @@
+use std::convert::TryFrom;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use actix_web::{http::HeaderValue, web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{
+    http::HeaderValue, middleware::Logger, web, App, HttpRequest, HttpResponse, HttpServer,
+};
 use tokio::sync::{mpsc, Mutex};
 use tokio_stream::StreamExt;
 
 use crate::config::Config;
+use crate::error::ServerError;
 
 #[macro_use]
 extern crate serde;
 
 mod auth;
 mod config;
+mod error;
 mod git;
 mod logging;
 mod webhook;
@@ -22,6 +27,36 @@ mod webhook;
 struct State {
     pub config: Arc<Config>,
     pub sender: Arc<Mutex<mpsc::UnboundedSender<Webhook>>>,
+}
+
+#[derive(Copy, Clone, Debug)]
+enum WebhookVariant {
+    Push,
+    Ping,
+}
+
+impl TryFrom<&HttpRequest> for WebhookVariant {
+    type Error = ServerError;
+
+    fn try_from(request: &HttpRequest) -> Result<Self, Self::Error> {
+        // Decide the variant to parse based on the headers
+        let header = match request
+            .headers()
+            .get("X-GitHub-Event")
+            .and_then(|v| v.to_str().ok())
+        {
+            Some(variant) => variant,
+            None => return Err(ServerError::BadRequest),
+        };
+
+        log::debug!("X-GitHub-Event header={}", header);
+
+        match header {
+            "push" => Ok(Self::Push),
+            "ping" => Ok(Self::Ping),
+            _ => Err(ServerError::BadRequest),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -48,11 +83,10 @@ impl Webhook {
     }
 
     /// Deserializes JSON from bytes depending on which variant is expected.
-    pub fn from_slice(variant: &str, bytes: &[u8]) -> serde_json::Result<Self> {
+    pub fn from_slice(variant: WebhookVariant, bytes: &[u8]) -> serde_json::Result<Self> {
         let webhook = match variant {
-            "push" => Self::Push(serde_json::from_slice(bytes)?),
-            "ping" => Self::Ping(serde_json::from_slice(bytes)?),
-            _ => unreachable!(),
+            WebhookVariant::Push => Self::Push(serde_json::from_slice(bytes)?),
+            WebhookVariant::Ping => Self::Ping(serde_json::from_slice(bytes)?),
         };
 
         Ok(webhook)
@@ -68,26 +102,18 @@ async fn verify_incoming_webhooks(
     state: web::Data<State>,
     mut payload: web::Payload,
     request: HttpRequest,
-) -> HttpResponse {
+) -> Result<HttpResponse, ServerError> {
     let mut bytes = web::BytesMut::new();
 
     while let Some(Ok(item)) = payload.next().await {
         bytes.extend_from_slice(&item);
     }
 
-    // Decide the variant to parse based on the headers
-    let variant = match request
-        .headers()
-        .get("X-GitHub-Event")
-        .and_then(|v| v.to_str().ok())
-    {
-        Some(variant) => variant,
-        None => return HttpResponse::BadRequest().finish(),
-    };
+    let variant = WebhookVariant::try_from(&request)?;
 
-    let webhook = match Webhook::from_slice(&variant, &bytes) {
+    let webhook = match Webhook::from_slice(variant, &bytes) {
         Ok(webhook) => webhook,
-        Err(_) => return HttpResponse::UnprocessableEntity().finish(),
+        Err(_) => return Err(ServerError::UnprocessableEntity),
     };
 
     // Validate the payload with the secret key
@@ -105,10 +131,7 @@ async fn verify_incoming_webhooks(
         .map(str::as_bytes)
         .map(|s| s.split_at(7).1);
 
-    if let Err(e) = auth::validate_webhook_body(&bytes, secret, expected) {
-        log::error!("Payload failed to validate with secret");
-        return e;
-    }
+    auth::validate_webhook_body(&bytes, secret, expected)?;
 
     log::debug!("Webhook verified: {:?}", &webhook);
 
@@ -117,7 +140,7 @@ async fn verify_incoming_webhooks(
     guard.send(webhook).unwrap();
 
     // Return a `Processing` status code
-    HttpResponse::Processing().finish()
+    Ok(HttpResponse::Processing().finish())
 }
 
 async fn process_webhooks(config: Arc<Config>, mut receiver: mpsc::UnboundedReceiver<Webhook>) {
@@ -162,6 +185,7 @@ async fn main() -> actix_web::Result<()> {
         };
 
         App::new()
+            .wrap(Logger::new("%s @ %r"))
             .data(state)
             .route("/", web::post().to(verify_incoming_webhooks))
     })

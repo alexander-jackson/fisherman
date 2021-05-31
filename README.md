@@ -50,3 +50,18 @@ specific:
         code_root: "/backend"
         binaries: ["api-server", "dcl"]
 ```
+
+### Discord Integration
+
+`fisherman` supports sending messages to a Discord channel when a repository
+successfully updates. This requires a Discord token and a channel identifier to
+send the messages to, and will inform you of the commit hash that it was
+updated to and the associated commit message.
+
+This can be set as follows in the configuration file:
+```yaml
+default:
+    discord:
+        token: "<token>"
+        channel_id: <channel_id>
+```

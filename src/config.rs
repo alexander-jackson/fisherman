@@ -2,6 +2,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use serenity::http::client::Http;
+use serenity::model::id::ChannelId;
+
 /// Represents the configuration for Discord notifications
 #[derive(Debug, Deserialize)]
 pub struct DiscordConfig {
@@ -108,6 +111,17 @@ impl Config {
                 options.check_for_potential_mistakes(&key);
             }
         }
+    }
+
+    /// Creates a new client and gets the channel identifier from the config, if it exists.
+    pub fn get_client_and_channel_id(&self) -> Option<(Http, ChannelId)> {
+        let discord = self.default.discord.as_ref()?;
+
+        // Create a new instance of the client
+        let client = Http::new_with_token(&discord.token);
+        let channel_id = ChannelId(discord.channel_id);
+
+        Some((client, channel_id))
     }
 
     /// Resolves the value of the `code_root` directive.

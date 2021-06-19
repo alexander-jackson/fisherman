@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
 use actix_web::HttpResponse;
-use serenity::http::client::Http;
-use serenity::model::id::ChannelId;
+use anyhow::{bail, Result};
 use tokio::process::Command;
 
 use crate::config::Config;
@@ -45,7 +44,7 @@ impl Push {
     /// This will open the repository, which is assumed to be at `repo_root` and fetch the contents
     /// of its default branch (which can be `master`, `main` or whatever the default is set to). It
     /// will then merge the contents of the fetch.
-    fn trigger_pull(&self, config: &Arc<Config>) -> Result<(), git2::Error> {
+    fn trigger_pull(&self, config: &Arc<Config>) -> Result<()> {
         let path = config.default.repo_root.join(&self.repository.name);
         let repo = git2::Repository::open(&path)?;
         let branch = config.resolve_follow_branch(&self.repository.full_name);
@@ -65,14 +64,14 @@ impl Push {
             &config.default.ssh_private_key,
         )?;
 
-        git::merge(&repo, branch, &fetch_commit)
+        Ok(git::merge(&repo, branch, &fetch_commit)?)
     }
 
     /// Triggers the recompilation of a repository associated with the webhook.
     ///
     /// This should be run after pulling the new changes to update the repository. After being
     /// rebuilt, it can be restarted in `supervisor` and the new changes will go live.
-    async fn trigger_build(&self, config: &Arc<Config>) -> std::io::Result<()> {
+    async fn trigger_build(&self, config: &Arc<Config>) -> Result<()> {
         let code_root = config.resolve_code_root(&self.repository.full_name);
         let binaries = config.resolve_binaries(&self.repository.full_name);
 
@@ -87,12 +86,16 @@ impl Push {
         for binary in binaries {
             log::info!("Building the binary called: {}", binary);
 
-            Command::new(config.default.cargo_path.clone())
+            let status = Command::new(config.default.cargo_path.clone())
                 .args(&["build", "--release", "--bin", &binary])
                 .current_dir(&path)
                 .spawn()?
                 .wait()
                 .await?;
+
+            if !status.success() {
+                bail!("Failed to build binary: {}", binary);
+            }
         }
 
         Ok(())
@@ -102,17 +105,21 @@ impl Push {
     ///
     /// Restarts the process within `supervisor`, allowing a new version to supersede the existing
     /// version.
-    async fn trigger_restart(&self, config: &Arc<Config>) -> std::io::Result<()> {
+    async fn trigger_restart(&self, config: &Arc<Config>) -> Result<()> {
         let binaries = config.resolve_binaries(&self.repository.full_name);
 
         for binary in binaries {
             log::info!("Allowing `supervisor` to restart: {}", binary);
 
-            Command::new("supervisorctl")
+            let status = Command::new("supervisorctl")
                 .args(&["restart", &binary])
                 .spawn()?
                 .wait()
                 .await?;
+
+            if !status.success() {
+                bail!("Failed to restart binary: {}", binary);
+            }
         }
 
         Ok(())
@@ -121,7 +128,7 @@ impl Push {
     /// Runs any additional commands specified in the config.
     ///
     /// Commands will be run in the `code_root` directory and will simply be executed by the shell.
-    async fn run_additional_commands(&self, config: &Arc<Config>) -> std::io::Result<()> {
+    async fn run_additional_commands(&self, config: &Arc<Config>) -> Result<()> {
         if let Some(commands) = config.resolve_commands(&self.repository.full_name) {
             let repo_path = config.default.repo_root.join(&self.repository.name);
 
@@ -136,7 +143,11 @@ impl Push {
                     to_execute.args(args);
                 }
 
-                to_execute.current_dir(&working_dir).spawn()?.wait().await?;
+                let status = to_execute.current_dir(&working_dir).spawn()?.wait().await?;
+
+                if !status.success() {
+                    bail!("Failed to execute command: {:?}", command);
+                }
             }
         }
 
@@ -145,22 +156,13 @@ impl Push {
 
     /// Notifies a Discord channel of the changes if a configuration exists.
     async fn notify_discord_channel(&self, config: &Arc<Config>) {
-        let discord = match config.default.discord.as_ref() {
-            Some(discord) => discord,
+        let (client, channel_id) = match config.get_client_and_channel_id() {
+            Some((client, channel_id)) => (client, channel_id),
             None => return,
         };
 
-        // Create a new instance of the client
-        let client = Http::new_with_token(&discord.token);
-        let channel_id = ChannelId(discord.channel_id);
-
         // Generate the message to send
-        let brief = self
-            .head_commit
-            .message
-            .lines()
-            .next()
-            .expect("Empty commit");
+        let brief = self.head_commit.message.lines().next().unwrap_or_default();
 
         let repository = &self.repository.full_name;
         let author = &self.head_commit.author.name;
@@ -177,12 +179,34 @@ impl Push {
             .expect("Failed to send the message to the channel");
     }
 
-    /// Retrieves the full name of the repository this webhook relates to.
-    pub fn get_full_name(&self) -> &str {
-        &self.repository.full_name
+    /// Notifies a Discord channel of a failure in the handling of a webhook.
+    async fn notify_of_failure(&self, config: &Arc<Config>, error: &str) {
+        let (client, channel_id) = match config.get_client_and_channel_id() {
+            Some((client, channel_id)) => (client, channel_id),
+            None => return,
+        };
+
+        let message = format!(
+            "Production instance of `{}` failed to be updated, error: {}",
+            self.repository.full_name, error
+        );
+
+        channel_id
+            .send_message(&client, |m| m.content(message))
+            .await
+            .expect("Failed to send the message to the channel");
     }
 
-    pub async fn handle(&self, config: &Arc<Config>) -> HttpResponse {
+    /// Handles the webhook message for push messages.
+    ///
+    /// Checks whether the message updates the followed branch before pulling the changes,
+    /// rebuilding all binaries, restarting them and running any additional commands provided in
+    /// the configuration. If this all succeeds, informs the Discord channel if this is specified
+    /// in the configuration as well.
+    async fn handle_inner(
+        &self,
+        config: &Arc<Config>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         // Get the branch that this repository follows
         let follow_branch = config.resolve_follow_branch(self.get_full_name());
 
@@ -190,29 +214,39 @@ impl Push {
             log::info!("Commits were pushed to `{}` in this event", follow_branch);
 
             // Pull the new changes
-            self.trigger_pull(config)
-                .expect("Failed to execute the pull.");
+            self.trigger_pull(config)?;
 
             // Build the updated binary
-            self.trigger_build(config)
-                .await
-                .expect("Failed to rebuild the binary");
+            self.trigger_build(config).await?;
 
             // Restart in `supervisor`
-            self.trigger_restart(config)
-                .await
-                .expect("Failed to restart the process");
+            self.trigger_restart(config).await?;
 
             // Run any additional commands
-            self.run_additional_commands(config)
-                .await
-                .expect("Failed to run additional commands");
+            self.run_additional_commands(config).await?;
 
             // Everything worked, so update the Discord channel if there is one
             self.notify_discord_channel(config).await;
         }
 
-        HttpResponse::Ok().finish()
+        Ok(())
+    }
+
+    /// Wraps the [`handle_inner`] method by propagating errors correctly.
+    pub async fn handle(&self, config: &Arc<Config>) -> HttpResponse {
+        match self.handle_inner(config).await {
+            Ok(()) => HttpResponse::Ok().finish(),
+            Err(e) => {
+                let error = e.to_string();
+                self.notify_of_failure(config, &error).await;
+                HttpResponse::InternalServerError().body(error)
+            }
+        }
+    }
+
+    /// Retrieves the full name of the repository this webhook relates to.
+    pub fn get_full_name(&self) -> &str {
+        &self.repository.full_name
     }
 }
 

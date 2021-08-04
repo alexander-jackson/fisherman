@@ -56,7 +56,7 @@ fn fast_forward(
     let msg = format!("Fast-Forward: Setting {} to id: {}", name, rc.id());
     log::debug!("{}", msg);
 
-    repo.set_head(&name)?;
+    repo.set_head(name)?;
     lb.set_target(rc.id(), &msg)?;
     repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
 
@@ -115,7 +115,7 @@ pub fn merge<'a>(
     fetch_commit: &git2::AnnotatedCommit<'a>,
 ) -> Result<(), git2::Error> {
     // 1. do a merge analysis
-    let analysis = repo.merge_analysis(&[&fetch_commit])?;
+    let analysis = repo.merge_analysis(&[fetch_commit])?;
 
     // 2. Do the appopriate merge
     if analysis.0.is_fast_forward() {
@@ -124,7 +124,7 @@ pub fn merge<'a>(
         let refname = format!("refs/heads/{}", remote_branch);
 
         if let Ok(mut r) = repo.find_reference(&refname) {
-            fast_forward(repo, &mut r, &fetch_commit)?;
+            fast_forward(repo, &mut r, fetch_commit)?;
         } else {
             // The branch doesn't exist so just set the reference to the
             // commit directly. Usually this is because you are pulling
@@ -146,7 +146,7 @@ pub fn merge<'a>(
     } else if analysis.0.is_normal() {
         // do a normal merge
         let head_commit = repo.reference_to_annotated_commit(&repo.head()?)?;
-        normal_merge(&repo, &head_commit, &fetch_commit)?;
+        normal_merge(repo, &head_commit, fetch_commit)?;
     } else {
         log::debug!("Nothing to do...");
     }

@@ -1,3 +1,5 @@
+#![allow(clippy::module_name_repetitions)]
+
 use std::convert::TryFrom;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::str::FromStr;

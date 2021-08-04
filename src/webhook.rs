@@ -205,7 +205,7 @@ impl Push {
         // Get the branch that this repository follows
         let follow_branch = config.resolve_follow_branch(self.get_full_name());
 
-        if self.changes_follow_branch(&follow_branch) {
+        if self.changes_follow_branch(follow_branch) {
             log::info!("Commits were pushed to `{}` in this event", follow_branch);
 
             // Pull the new changes

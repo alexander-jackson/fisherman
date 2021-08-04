@@ -139,7 +139,7 @@ impl Config {
 
         if let Some(specific) = self.specific.as_ref() {
             for (key, options) in specific {
-                options.check_for_potential_mistakes(&key);
+                options.check_for_potential_mistakes(key);
             }
         }
     }

@@ -67,6 +67,18 @@ impl Push {
         Ok(git::merge(&repo, branch, &fetch_commit)?)
     }
 
+    /// Runs any precommands specified in the config.
+    ///
+    /// Commands will be run in the `code_root` directory and will simply be executed by the shell.
+    async fn run_precommands(&self, config: &Arc<Config>) -> Result<()> {
+        if let Some(commands) = config.resolve_precommands(&self.repository.full_name) {
+            let repo_path = config.default.repo_root.join(&self.repository.name);
+            commands.execute(&repo_path).await?;
+        }
+
+        Ok(())
+    }
+
     /// Triggers the recompilation of a repository associated with the webhook.
     ///
     /// This should be run after pulling the new changes to update the repository. After being
@@ -131,24 +143,7 @@ impl Push {
     async fn run_additional_commands(&self, config: &Arc<Config>) -> Result<()> {
         if let Some(commands) = config.resolve_commands(&self.repository.full_name) {
             let repo_path = config.default.repo_root.join(&self.repository.name);
-
-            for command in commands {
-                let working_dir = repo_path.join(command.working_dir.clone().unwrap_or_default());
-
-                log::info!("Executing: {:?} at {:?}", command, working_dir);
-
-                let mut to_execute = Command::new(&command.program);
-
-                if let Some(args) = command.args.as_ref() {
-                    to_execute.args(args);
-                }
-
-                let status = to_execute.current_dir(&working_dir).spawn()?.wait().await?;
-
-                if !status.success() {
-                    bail!("Failed to execute command: {:?}", command);
-                }
-            }
+            commands.execute(&repo_path).await?;
         }
 
         Ok(())
@@ -215,6 +210,9 @@ impl Push {
 
             // Pull the new changes
             self.trigger_pull(config)?;
+
+            // Run any precommands that have been setup
+            self.run_precommands(config).await?;
 
             // Build the updated binary
             self.trigger_build(config).await?;

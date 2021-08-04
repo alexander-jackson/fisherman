@@ -1,9 +1,38 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use anyhow::{bail, Result};
 use serenity::http::client::Http;
 use serenity::model::id::ChannelId;
+
+/// Represents any commands that should be run by the shell.
+#[derive(Debug, Deserialize)]
+pub struct Commands(Vec<Command>);
+
+impl Commands {
+    pub async fn execute(&self, repo_path: &Path) -> Result<()> {
+        for command in &self.0 {
+            let working_dir = repo_path.join(command.working_dir.clone().unwrap_or_default());
+
+            log::info!("Executing: {:?} at {:?}", command, working_dir);
+
+            let mut to_execute = tokio::process::Command::new(&command.program);
+
+            if let Some(args) = command.args.as_ref() {
+                to_execute.args(args);
+            }
+
+            let status = to_execute.current_dir(&working_dir).spawn()?.wait().await?;
+
+            if !status.success() {
+                bail!("Failed to execute command: {:?}", command);
+            }
+        }
+
+        Ok(())
+    }
+}
 
 /// Represents the configuration for Discord notifications
 #[derive(Debug, Deserialize)]
@@ -53,8 +82,10 @@ pub struct SpecificOptions {
     pub secret: Option<String>,
     /// The branch to follow for this repository
     pub follow: Option<String>,
+    /// The commands to execute before processing
+    pub precommands: Option<Commands>,
     /// The commands to execute at the end of processing
-    pub commands: Option<Vec<Command>>,
+    pub commands: Option<Commands>,
 }
 
 impl SpecificOptions {
@@ -166,10 +197,18 @@ impl Config {
         specific.unwrap_or("master")
     }
 
+    /// Resolves the value of the `precommands` directive.
+    ///
+    /// If a specific value exists, it will be returned, otherwise nothing will be returned.
+    pub fn resolve_precommands(&self, repository: &str) -> Option<&Commands> {
+        self.get_specific_config(repository)
+            .and_then(|s| s.precommands.as_ref())
+    }
+
     /// Resolves the value of the `commands` directive.
     ///
     /// If a specific value exists, it will be returned, otherwise nothing will be returned.
-    pub fn resolve_commands(&self, repository: &str) -> Option<&Vec<Command>> {
+    pub fn resolve_commands(&self, repository: &str) -> Option<&Commands> {
         self.get_specific_config(repository)
             .and_then(|s| s.commands.as_ref())
     }

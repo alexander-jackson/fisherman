@@ -27,7 +27,7 @@ pub fn validate_webhook_body(
         return mac.verify(&decoded).map_err(|_| ServerError::Unauthorized);
     }
 
-    log::error!("Payload failed to validate with secret");
+    tracing::warn!(has_secret = %secret.is_some(), has_expected = %expected.is_some(), "Either expected a value and did not receive one or received one without expecting it");
 
     Err(ServerError::Unauthorized)
 }

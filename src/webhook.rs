@@ -49,11 +49,7 @@ impl Push {
         let repo = git2::Repository::open(&path)?;
         let branch = config.resolve_follow_branch(&self.repository.full_name);
 
-        log::info!(
-            "Fetching changes for the project at `{:?}` on branch `{}`",
-            path,
-            branch
-        );
+        tracing::info!(?path, %branch, "Fetching changes for the project");
 
         let mut remote = repo.find_remote("origin")?;
 
@@ -93,10 +89,10 @@ impl Push {
             .join(&self.repository.name)
             .join(&code_root);
 
-        log::info!("Building release binaries with root at: {:?}", path);
+        tracing::info!(?path, "Rebuilding binaries");
 
         for binary in binaries {
-            log::info!("Building the binary called: {}", binary);
+            tracing::info!(%binary, "Building a specific binary");
 
             let status = Command::new(config.default.cargo_path.clone())
                 .args(&["build", "--release", "--bin", &binary])
@@ -121,7 +117,7 @@ impl Push {
         let binaries = config.resolve_binaries(&self.repository.full_name);
 
         for binary in binaries {
-            log::info!("Allowing `supervisor` to restart: {}", binary);
+            tracing::info!(%binary, "Allowing `supervisor` to restart");
 
             let status = Command::new("supervisorctl")
                 .args(&["restart", &binary])
@@ -206,7 +202,7 @@ impl Push {
         let follow_branch = config.resolve_follow_branch(self.get_full_name());
 
         if self.changes_follow_branch(follow_branch) {
-            log::info!("Commits were pushed to `{}` in this event", follow_branch);
+            tracing::info!(%follow_branch, "Commits were pushed to the followed branch in this event");
 
             // Pull the new changes
             self.trigger_pull(config)?;

@@ -9,7 +9,6 @@ edition = "2018"
 [dependencies]
 actix-web = "4.0.0-beta.7"
 actix-rt = "2.2.0"
-log = "0.4.14"
 chrono = "0.4.19"
 git2 = "0.13.20"
 serde_yaml = "0.8.17"
@@ -20,6 +19,8 @@ sha2 = "0.9.5"
 hex = "0.4.3"
 serenity = "0.10.8"
 anyhow = "1.0.41"
+tracing = "0.1.26"
+tracing-subscriber = "0.2.19"
 
 [dependencies.tokio]
 version = "1.7.1"
@@ -28,7 +29,3 @@ features = ["macros", "rt-multi-thread", "process"]
 [dependencies.serde]
 version = "1.0.126"
 features = ["derive"]
-
-[dependencies.fern]
-version = "0.6.0"
-features = ["colored"]

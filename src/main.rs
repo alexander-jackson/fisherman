@@ -51,7 +51,7 @@ impl TryFrom<&HttpRequest> for WebhookVariant {
             None => return Err(ServerError::BadRequest),
         };
 
-        log::debug!("X-GitHub-Event header={}", header);
+        tracing::debug!(%header, "Received an X-GitHub Event header");
 
         match header {
             "push" => Ok(Self::Push),
@@ -135,7 +135,7 @@ async fn verify_incoming_webhooks(
 
     auth::validate_webhook_body(&bytes, secret, expected)?;
 
-    log::debug!("Webhook verified: {:?}", &webhook);
+    tracing::debug!(?webhook, "Verified");
 
     // Send the message to the other thread
     let guard = state.sender.lock().await;
@@ -163,13 +163,13 @@ async fn main() -> actix_web::Result<()> {
     let content = std::fs::read_to_string("fisherman.yml")?;
     let config = Arc::new(Config::from_str(&content).expect("Failed to parse config"));
 
-    log::info!("Using the following config: {:#?}", config);
-
     config.check_for_potential_mistakes();
 
     // Setup the socket to run on
     let port = config.default.port.unwrap_or(5000);
     let socket = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
+
+    tracing::info!(%port, ?config, "Listening for incoming webhooks");
 
     let (sender, receiver) = mpsc::unbounded_channel();
     let sender = Arc::new(Mutex::new(sender));

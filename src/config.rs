@@ -15,7 +15,7 @@ impl Commands {
         for command in &self.0 {
             let working_dir = repo_path.join(command.working_dir.clone().unwrap_or_default());
 
-            log::info!("Executing: {:?} at {:?}", command, working_dir);
+            tracing::info!(?command, ?working_dir, "Executing a user specified command");
 
             let mut to_execute = tokio::process::Command::new(&command.program);
 
@@ -92,11 +92,7 @@ impl SpecificOptions {
     /// Checks whether there are any likely mistakes in the config.
     pub fn check_for_potential_mistakes(&self, key: &str) {
         if matches!(self.code_root.as_ref(), Some(path) if path.is_absolute()) {
-            log::warn!(
-                "code_root={:?} for key={} is absolute but it should be relative",
-                self.code_root,
-                key
-            );
+            tracing::warn!(?self.code_root, %key, "`code_root` values should be relative, encountered an absolute one");
         }
     }
 }
@@ -120,21 +116,15 @@ impl Config {
 
         // Check the key, root and Cargo binary exist
         if !default.ssh_private_key.is_file() {
-            log::warn!(
-                "ssh_private_key={:?} does not exist or is not a file",
-                default.ssh_private_key
-            );
+            tracing::warn!(?default.ssh_private_key, "`ssh_private_key` either does not exist or is not a file");
         }
 
-        if !default.repo_root.exists() {
-            log::warn!("repo_root={:?} does not exist", default.repo_root);
+        if !default.repo_root.is_dir() {
+            tracing::warn!(?default.repo_root, "`repo_root` either does not exist or is not a directory");
         }
 
         if !default.cargo_path.is_file() {
-            log::warn!(
-                "cargo_path={:?} does not exist or is not a file",
-                default.cargo_path
-            );
+            tracing::warn!(?default.cargo_path, "`cargo_path` either does not exist or is not a file");
         }
 
         if let Some(specific) = self.specific.as_ref() {

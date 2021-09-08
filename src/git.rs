@@ -18,29 +18,22 @@ pub fn fetch<'a>(
     fo.remote_callbacks(cb);
     fo.download_tags(git2::AutotagOption::All);
 
-    log::debug!("Fetching {} for repo", remote.name().unwrap());
+    let remote_name = remote.name().unwrap();
+
+    tracing::debug!(?remote_name, ?refs, "Fetching data for the repository");
+
     remote.fetch(refs, Some(&mut fo), None)?;
 
     // If there are local objects (we got a thin pack), then tell the user
     // how many objects we saved from having to cross the network.
     let stats = remote.stats();
 
-    if stats.local_objects() > 0 {
-        log::debug!(
-            "Received {}/{} objects in {} bytes (used {} local objects)",
-            stats.indexed_objects(),
-            stats.total_objects(),
-            stats.received_bytes(),
-            stats.local_objects()
-        );
-    } else {
-        log::debug!(
-            "Received {}/{} objects in {} bytes",
-            stats.indexed_objects(),
-            stats.total_objects(),
-            stats.received_bytes()
-        );
-    }
+    let indexed_objects = stats.indexed_objects();
+    let total_objects = stats.total_objects();
+    let received_bytes = stats.received_bytes();
+    let local_objects = stats.local_objects();
+
+    tracing::info!(%indexed_objects, %total_objects, %local_objects, %received_bytes, "Successfully updated using the remote");
 
     let fetch_head = repo.find_reference("FETCH_HEAD")?;
     repo.reference_to_annotated_commit(&fetch_head)
@@ -54,7 +47,6 @@ fn fast_forward(
 ) -> Result<(), git2::Error> {
     let name = lb.name().expect("Reference was invalid UTF-8");
     let msg = format!("Fast-Forward: Setting {} to id: {}", name, rc.id());
-    log::debug!("{}", msg);
 
     repo.set_head(name)?;
     lb.set_target(rc.id(), &msg)?;
@@ -79,7 +71,7 @@ fn normal_merge(
     let mut idx = repo.merge_trees(&ancestor, &local_tree, &remote_tree, None)?;
 
     if idx.has_conflicts() {
-        log::debug!("Merge conficts detected...");
+        tracing::warn!(local_id = ?local.id(), remote_id = ?remote.id(), "Encountered conflicts between the two versions");
         repo.checkout_index(Some(&mut idx), None)?;
         return Ok(());
     }
@@ -119,9 +111,10 @@ pub fn merge<'a>(
 
     // 2. Do the appopriate merge
     if analysis.0.is_fast_forward() {
-        log::debug!("Doing a fast forward");
         // do a fast forward
         let refname = format!("refs/heads/{}", remote_branch);
+
+        tracing::debug!(%remote_branch, %refname, "Performing a fast-forward merge");
 
         if let Ok(mut r) = repo.find_reference(&refname) {
             fast_forward(repo, &mut r, fetch_commit)?;
@@ -147,8 +140,6 @@ pub fn merge<'a>(
         // do a normal merge
         let head_commit = repo.reference_to_annotated_commit(&repo.head()?)?;
         normal_merge(repo, &head_commit, fetch_commit)?;
-    } else {
-        log::debug!("Nothing to do...");
     }
 
     Ok(())

@@ -80,6 +80,15 @@ impl Push {
     /// This should be run after pulling the new changes to update the repository. After being
     /// rebuilt, it can be restarted in `supervisor` and the new changes will go live.
     async fn trigger_build(&self, config: &Arc<Config>) -> Result<()> {
+        if !config.should_build_binaries(&self.repository.full_name) {
+            tracing::info!(
+                repo = %self.repository.full_name,
+                "Not building any binaries for the repository as set in the configuration"
+            );
+
+            return Ok(());
+        }
+
         let code_root = config.resolve_code_root(&self.repository.full_name);
         let binaries = config.resolve_binaries(&self.repository.full_name);
 

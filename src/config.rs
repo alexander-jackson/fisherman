@@ -84,6 +84,8 @@ pub struct SpecificOptions {
     pub follow: Option<String>,
     /// The commands to execute before processing
     pub precommands: Option<Commands>,
+    /// Whether to build binaries with `cargo`.
+    pub should_build_binaries: Option<bool>,
     /// The commands to execute at the end of processing
     pub commands: Option<Commands>,
 }
@@ -143,6 +145,13 @@ impl Config {
         let channel_id = ChannelId(discord.channel_id);
 
         Some((client, channel_id))
+    }
+
+    /// Checks whether this repository should be built with `cargo`.
+    pub fn should_build_binaries(&self, repository: &str) -> bool {
+        self.get_specific_config(repository)
+            .and_then(|s| s.should_build_binaries)
+            .unwrap_or(true)
     }
 
     /// Resolves the value of the `code_root` directive.
@@ -236,6 +245,9 @@ specific:
 
     alexander-jackson/ptc:
         code_root: "/ptc"
+
+    alexander-jackson/se-powerlifting-website:
+        should_build_binaries: false
 "#;
 
     #[test]
@@ -360,5 +372,22 @@ specific:
         let follow_branch = config.resolve_follow_branch("FreddieBrown/dodona");
 
         assert_eq!(follow_branch, "develop");
+    }
+
+    #[test]
+    fn binaries_are_built_if_not_specified() {
+        let config = Config::from_str(CONFIG).unwrap();
+        let should_build_binaries = config.should_build_binaries("FreddieBrown/dodona");
+
+        assert!(should_build_binaries);
+    }
+
+    #[test]
+    fn binaries_are_not_built_based_on_config() {
+        let config = Config::from_str(CONFIG).unwrap();
+        let should_build_binaries =
+            config.should_build_binaries("alexander-jackson/se-powerlifting-website");
+
+        assert!(!should_build_binaries);
     }
 }

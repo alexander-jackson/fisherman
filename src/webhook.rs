@@ -10,8 +10,6 @@ use crate::git;
 #[derive(Debug, Deserialize)]
 pub struct User {
     name: String,
-    email: String,
-    username: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -25,8 +23,6 @@ pub struct Commit {
 pub struct Push {
     #[serde(rename = "ref")]
     refname: String,
-    before: String,
-    after: String,
     repository: Repository,
     head_commit: Commit,
 }
@@ -255,8 +251,6 @@ impl Push {
 
 #[derive(Debug, Deserialize)]
 pub struct Ping {
-    zen: String,
-    hook_id: u32,
     hook: Hook,
     repository: Repository,
 }
@@ -278,25 +272,17 @@ impl Ping {
 
 #[derive(Debug, Deserialize)]
 pub struct Repository {
-    id: u32,
     name: String,
     full_name: String,
-    default_branch: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Hook {
     #[serde(rename = "type")]
-    ty: String,
-    id: u32,
-    name: String,
-    active: bool,
-    events: Vec<String>,
     config: HookConfig,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct HookConfig {
-    content_type: String,
     url: String,
 }

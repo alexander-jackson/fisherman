@@ -119,6 +119,15 @@ impl Push {
     /// Restarts the process within `supervisor`, allowing a new version to supersede the existing
     /// version.
     async fn trigger_restart(&self, config: &Arc<Config>) -> Result<()> {
+        if !config.should_build_binaries(&self.repository.full_name) {
+            tracing::info!(
+                repo = %self.repository.full_name,
+                "Not restarting any processes for this webhook"
+            );
+
+            return Ok(());
+        }
+
         let binaries = config.resolve_binaries(&self.repository.full_name);
 
         for binary in binaries {

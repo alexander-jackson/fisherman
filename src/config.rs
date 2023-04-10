@@ -141,7 +141,7 @@ impl Config {
         let discord = self.default.discord.as_ref()?;
 
         // Create a new instance of the client
-        let client = Http::new_with_token(&discord.token);
+        let client = Http::new(&discord.token);
         let channel_id = ChannelId(discord.channel_id);
 
         Some((client, channel_id))
@@ -181,7 +181,7 @@ impl Config {
     pub fn resolve_secret(&self, repository: &str) -> Option<&str> {
         self.get_specific_config(repository)
             .and_then(|s| s.secret.as_deref())
-            .or_else(|| self.default.secret.as_deref())
+            .or(self.default.secret.as_deref())
     }
 
     /// Resolves the value of the `follow` directive.

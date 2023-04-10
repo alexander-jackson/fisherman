@@ -5,9 +5,10 @@ use std::net::{Ipv4Addr, SocketAddrV4};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use actix_web::{
-    http::HeaderValue, middleware::Logger, web, App, HttpRequest, HttpResponse, HttpServer,
-};
+use actix_web::http::header::HeaderValue;
+use actix_web::middleware::Logger;
+use actix_web::web::{self, Data};
+use actix_web::{App, HttpRequest, HttpResponse, HttpServer};
 use tokio::sync::{mpsc, Mutex};
 use tokio_stream::StreamExt;
 
@@ -113,10 +114,8 @@ async fn verify_incoming_webhooks(
 
     let variant = WebhookVariant::try_from(&request)?;
 
-    let webhook = match Webhook::from_slice(variant, &bytes) {
-        Ok(webhook) => webhook,
-        Err(_) => return Err(ServerError::UnprocessableEntity),
-    };
+    let webhook =
+        Webhook::from_slice(variant, &bytes).map_err(|_| ServerError::UnprocessableEntity)?;
 
     // Validate the payload with the secret key
     let secret = state
@@ -188,7 +187,7 @@ async fn main() -> actix_web::Result<()> {
 
         App::new()
             .wrap(Logger::new("%s @ %r"))
-            .data(state)
+            .app_data(Data::new(state))
             .route("/", web::post().to(verify_incoming_webhooks))
     })
     .bind(socket)?

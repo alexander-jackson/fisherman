@@ -100,8 +100,8 @@ impl Push {
             tracing::info!(%binary, "Building a specific binary");
 
             let status = Command::new(config.default.cargo_path.clone())
-                .args(&["build", "--release", "--bin", &binary])
-                .current_dir(&path)
+                .args(["build", "--release", "--bin", &binary])
+                .current_dir(path)
                 .spawn()?
                 .wait()
                 .await?;
@@ -134,7 +134,7 @@ impl Push {
             tracing::info!(%binary, "Allowing `supervisor` to restart");
 
             let status = Command::new("supervisorctl")
-                .args(&["restart", &binary])
+                .args(["restart", &binary])
                 .spawn()?
                 .wait()
                 .await?;

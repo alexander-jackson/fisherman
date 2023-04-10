@@ -2,30 +2,30 @@
 name = "fisherman"
 version = "0.1.0"
 authors = ["Alexander Jackson <alexanderjackson@protonmail.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-actix-web = "4.0.0-beta.7"
-actix-rt = "2.2.0"
-chrono = "0.4.19"
-git2 = "0.13.20"
-serde_yaml = "0.8.17"
-serde_json = "1.0.64"
-tokio-stream = "0.1.6"
-hmac = "0.11.0"
-sha2 = "0.9.5"
+actix-web = "4.3.1"
+actix-rt = "2.8.0"
+chrono = "0.4.24"
+git2 = "0.17.0"
+serde_yaml = "0.9.21"
+serde_json = "1.0.95"
+tokio-stream = "0.1.12"
+hmac = "0.12.1"
+sha2 = "0.10.6"
 hex = "0.4.3"
-serenity = "0.10.8"
-anyhow = "1.0.41"
-tracing = "0.1.26"
-tracing-subscriber = "0.2.19"
+serenity = "0.11.5"
+anyhow = "1.0.70"
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 
 [dependencies.tokio]
-version = "1.7.1"
+version = "1.27.0"
 features = ["macros", "rt-multi-thread", "process"]
 
 [dependencies.serde]
-version = "1.0.126"
+version = "1.0.159"
 features = ["derive"]

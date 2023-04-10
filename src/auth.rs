@@ -1,4 +1,4 @@
-use hmac::{Hmac, Mac, NewMac};
+use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
 use crate::error::ServerError;
@@ -24,7 +24,9 @@ pub fn validate_webhook_body(
 
         mac.update(bytes);
 
-        return mac.verify(&decoded).map_err(|_| ServerError::Unauthorized);
+        return mac
+            .verify_slice(&decoded)
+            .map_err(|_| ServerError::Unauthorized);
     }
 
     tracing::warn!(has_secret = %secret.is_some(), has_expected = %expected.is_some(), "Either expected a value and did not receive one or received one without expecting it");

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use actix_web::{body::Body, http::StatusCode, HttpResponse, ResponseError};
+use actix_web::{body::BoxBody, http::StatusCode, HttpResponse, ResponseError};
 
 #[derive(Copy, Clone, Debug)]
 pub enum ServerError {
@@ -30,7 +30,7 @@ impl ResponseError for ServerError {
         }
     }
 
-    fn error_response(&self) -> HttpResponse<Body> {
+    fn error_response(&self) -> HttpResponse<BoxBody> {
         HttpResponse::build(self.status_code()).body(self.to_string())
     }
 }
